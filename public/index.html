@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>残響時間測定アプリ</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- P1 ホーム -->
+<main id="home" class="screen active">
+  <div class="topbar"><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="home-center">
+    <svg class="decay" viewBox="0 0 220 60" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 6 L22 54 L40 14 L58 48 L76 22 L94 44 L112 28 L130 41 L148 32 L166 39 L184 35 L216 38"/>
+    </svg>
+    <h1>残響時間測定アプリ</h1>
+    <button class="btn primary" data-go="overview">測定を始める</button>
+    <button class="btn secondary" data-go="history">今までの結果</button>
+  </div>
+</main>
+
+<!-- 今までの結果(補助画面) -->
+<section id="history" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>今までの結果</h2>
+    <div id="historyStatus" class="meta" role="status" aria-live="polite"></div>
+    <div id="historyList" class="stack"></div>
+    <button class="btn secondary" id="historyReload" type="button">再読み込み</button>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="home">戻る</button></div>
+</section>
+
+<!-- P2 概要 -->
+<section id="overview" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>当アプリの概要</h2>
+    <p>このアプリは保育施設における残響時間を測定することによって、全国の保育施設の音環境をより良くしていくことを目的に開発されました。以下の手順で進んでいきます。</p>
+    <ol class="steps">
+      <li><strong>準備</strong>:施設名を含む基本情報の入力、また部屋の寸法を入力します。その後、チェックリストや指示に沿って正確な測定に向けた準備を行います。</li>
+      <li><strong>測定</strong>:アプリから音を鳴らして、部屋の響きを記録します。測定中はできるだけ静かにしてください。</li>
+      <li><strong>結果表示</strong>:残響時間が表示され、データをアップロードすることによって結果が保存されます。その他、測定をやり直すことや別の場所で測定を行うことも出来ます。</li>
+    </ol>
+    <h3>※測定結果のアップロードについて</h3>
+    <p>アップロードするデータには、施設名・所在地・部屋の用途や寸法・測定位置・測定結果・測定日時が含まれています。全国の保育施設の音環境をより良くするため、音響専門家が保育施設の音環境について現状を把握し、施設の比較を行ったり分析を行うことにデータは使われます。本目的以外では使用、公開はしません。</p>
+    <p>内容を確認したら「次へ」を押してください。</p>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="home">戻る</button><button class="btn primary" data-go="info">次へ</button></div>
+</section>
+
+<!-- P3 情報入力 -->
+<section id="info" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>施設・部屋の情報</h2>
+    <button class="btn secondary" id="fillSample" type="button">サンプル情報を入力</button>
+
+    <div class="section-title">施設</div>
+    <label class="field"><span>施設名</span><input id="facility" type="text" placeholder="例:○○保育園" autocomplete="off"></label>
+    <div class="grid2">
+      <label class="field"><span>県</span><select id="pref"><option value="">選択してください</option></select></label>
+      <label class="field"><span>市町村</span><input id="city" type="text" placeholder="例:習志野市" autocomplete="off"></label>
+    </div>
+
+    <div class="section-title">部屋</div>
+    <label class="field"><span>部屋の用途</span><select id="use"><option value="">選択してください</option></select></label>
+    <label class="field" id="useNoteWrap" hidden><span>自由記述</span><input id="useNote" type="text" placeholder="例:0歳児クラス" autocomplete="off"></label>
+
+    <div class="grid3">
+      <label class="field"><span>奥行 (m)</span><input id="depth" type="text" inputmode="decimal" placeholder="例:5"></label>
+      <label class="field"><span>幅 (m)</span><input id="width" type="text" inputmode="decimal" placeholder="例:7"></label>
+      <label class="field"><span>高さ (m)</span><input id="height" type="text" inputmode="decimal" placeholder="例:3"></label>
+    </div>
+    <div class="hint">寸法はメートル単位で入力してください(小数可)。</div>
+
+    <div class="error" id="err" role="alert"></div>
+    <button class="btn primary" id="drawBtn" type="button">間取り図を表示</button>
+
+    <div id="planArea" hidden>
+      <div class="plan-wrap"><svg id="plan" viewBox="0 0 320 270" role="img" aria-label="部屋の間取り図"></svg></div>
+      <div class="summary">
+        <div>床面積<b id="sArea">-</b></div><div>室容積<b id="sVol">-</b></div><div>周長<b id="sPer">-</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="overview">戻る</button><button class="btn primary" id="nextInfo" data-go="checklist" disabled>次へ</button></div>
+</section>
+
+<!-- P4 チェックリスト -->
+<section id="checklist" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>測定前のチェックリスト</h2>
+    <p>正確に測定するため、すべての項目を確認してチェックを入れてください。</p>
+    <button class="btn secondary" id="checkAll" type="button">すべてチェックする</button>
+    <div class="stack" id="checkList"></div>
+    <div class="meta" id="checkCount" aria-live="polite"></div>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="info">戻る</button><button class="btn primary" id="nextCheck" data-go="position" disabled>次へ</button></div>
+</section>
+
+<!-- P5 測定位置・測定ガイド -->
+<section id="position" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>測定位置</h2>
+    <div class="summary">
+      <div>室容積<b id="pVol">-</b></div><div>直接音距離<b id="pDc">-</b></div><div>測定点数<b id="pN">-</b></div>
+    </div>
+    <div class="plan-wrap"><svg id="planPos" viewBox="0 0 320 270" role="img" aria-label="測定位置を示した平面図"></svg></div>
+    <div class="meta" id="posNote"></div>
+
+    <h3>測定ガイド</h3>
+    <ol class="steps">
+      <li>端末を胸の高さで持ち、スピーカーとマイクをふさがないようにします。</li>
+      <li>「次へ」を押すとすぐに測定が始まり、アプリから音が鳴ります。</li>
+      <li>音が鳴っている間は、その場から動かず、静かにしてください。</li>
+      <li>測定が終わると、自動で結果の画面に切り替わります。</li>
+    </ol>
+    <div class="warn">※「次へ」を押すと測定が始まります。準備ができてから押してください。</div>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="checklist">戻る</button><button class="btn primary" data-go="measuring">次へ</button></div>
+</section>
+
+<!-- P6 測定 -->
+<section id="measuring" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button></div>
+  <div class="measuring-center">
+    <h2>測定</h2>
+    <div class="error" id="measureErr" role="alert"></div>
+  </div>
+  <div class="footer"><button class="btn secondary" data-go="position">戻る</button><button class="btn primary" id="measureNext" type="button">次へ</button></div>
+</section>
+
+<!-- P7 結果 -->
+<section id="result" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button><div class="spacer"></div><button class="icon-btn" data-go="help">ヘルプ</button></div>
+  <div class="body">
+    <h2>測定結果</h2>
+    <div class="meta" id="resMeta"></div>
+    <div class="summary two">
+      <div>RT60<b id="resRt">-</b></div><div>EDT<b id="resEdt">-</b></div>
+    </div>
+    <div class="graph-frame" id="graphFrame" role="img" aria-label="結果グラフ(準備中)">グラフ表示エリア(準備中)</div>
+    <div class="demo" id="demoNote" hidden>※デモ用の仮の値です。</div>
+    <div class="ok" id="uploadMsg" role="status"></div>
+    <div class="error" id="uploadErr" role="alert"></div>
+  </div>
+  <div class="stack">
+    <button class="btn primary" id="uploadBtn" type="button">結果をアップロード</button>
+    <button class="btn secondary" id="redoBtn" type="button">同じ場所で測定をやり直す</button>
+    <button class="btn secondary" id="otherBtn" type="button">別の場所で測定をする</button>
+    <button class="btn secondary" data-go="home">ホームに戻る</button>
+  </div>
+</section>
+
+<!-- P8 ヘルプ -->
+<section id="help" class="screen">
+  <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button></div>
+  <div class="body">
+    <h2>ヘルプ</h2>
+    <p>「測定を始める」から部屋の響きを測定できます。</p>
+    <h3>残響時間とは</h3>
+    <p>音が止まってから、部屋に残った音が元の大きさより60デシベル小さくなるまでの時間です。その場所での音の響きやすさが分かります。</p>
+    <h3>保育室で測る理由</h3>
+    <p>部屋が響きすぎると声が聞き取りにくくなり、子どもも職員も疲れやすくなります。特に、子どもにとっては発育に関わることもあるため、保育施設の音環境をより良く整えることは重要です。</p>
+    <p>アップロードした結果はFirebaseに保存され、同じ端末の匿名ユーザーで保存した結果を「今までの結果」で確認できます。別の端末やブラウザーで保存した結果は表示されません。</p>
+  </div>
+  <div class="footer"><button class="btn secondary" id="helpBack" type="button">前の画面に戻る</button></div>
+</section>
+
+<!-- 確認ダイアログ -->
+<div class="overlay" id="dialog" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle" aria-describedby="dlgMsg">
+    <h3 id="dlgTitle">注意</h3>
+    <p id="dlgMsg"></p>
+    <div class="modal-actions">
+      <button class="btn secondary" id="dlgCancel" type="button">キャンセル</button>
+      <button class="btn primary" id="dlgOk" type="button">ホームに戻る</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

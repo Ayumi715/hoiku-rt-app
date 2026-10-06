@@ -1,0 +1,8 @@
+node_modules/
+.firebase/
+.env
+.env.*
+!.env.example
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

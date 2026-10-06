@@ -1,0 +1,16 @@
+{
+  "name": "hoiku-reverb-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "保育施設の残響時間測定アプリ(保育士用)",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "firebase emulators:start --only hosting,firestore,auth",
+    "deploy": "firebase deploy",
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "login": "firebase login"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.0.0"
+  }
+}
