@@ -325,11 +325,31 @@ $("saveBtn").addEventListener("click", async () => {
     await uploadMeasurement(state, idx, name);
     state.results[idx].uploaded = true;
   } catch (err) {
-    console.error(err);
-    $("uploadErr").textContent = "保存に失敗しました。通信状況を確認して、もう一度お試しください。";
+    console.error("測定結果の保存に失敗しました。", err);
+    $("uploadErr").textContent = saveErrorMessage(err);
   }
   if (current === "result" && state.activeIdx === idx) updateUploadUI();
 });
+
+function saveErrorMessage(error) {
+  const code = error && error.code;
+  if (code === "permission-denied") {
+    return "Firebaseの保存権限がありません。Firestoreルールがデプロイ済みか、匿名ログインがFirebaseで有効か確認してください。";
+  }
+  if (code === "unauthenticated" || code === "auth/operation-not-allowed") {
+    return "ログインできないため保存できません。Firebase Authenticationで匿名ログインを有効にしてください。";
+  }
+  if (code === "unavailable" || code === "deadline-exceeded" || code === "network-request-failed") {
+    return "Firebaseに接続できません。ネットワークを確認して、もう一度お試しください。";
+  }
+  if (code === "invalid-argument" || code === "data-loss") {
+    return `保存データをFirebaseが受け付けませんでした（${code}）。もう一度測定してください。`;
+  }
+  const detail = [code, error && error.message].filter(Boolean).join(": ");
+  return detail
+    ? `保存に失敗しました（${detail}）。この内容を確認してください。`
+    : "保存に失敗しました。ブラウザーの開発者ツールでFirebaseのエラーを確認してください。";
+}
 
 function drawLineChart(canvas, values, { min, max, color, yLabel, xLabel }) {
   const rect = canvas.getBoundingClientRect();

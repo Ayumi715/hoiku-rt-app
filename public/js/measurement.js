@@ -2,20 +2,27 @@ export const DEMO = false;
 
 export const MEASUREMENT_SETTINGS = Object.freeze({
   signalType: "pink-tsp",
-  durationSeconds: 3,
+  durationSeconds: 2.73,
   startFrequencyHz: 40,
   endFrequencyHz: 16000,
-  averages: 3
+  averages: 3,
+  playbackGain: 0.5
 });
 
-const TAIL_SECONDS = 3;
-const OUTPUT_PEAK_LIMIT = 0.3;
-const OUTPUT_RMS_TARGET = 0.08;
+const MEASUREMENT_SECONDS = 10.9;
+const EDGE_OCTAVES = 1;
+const SWEEP_START_RATIO = 0.02;
+const SWEEP_END_RATIO = 0.92;
 
 function nextPowerOfTwo(value) {
   let size = 1;
   while (size < value) size *= 2;
   return size;
+}
+
+function nearestPowerOfTwo(value) {
+  const exponent = Math.round(Math.log2(Math.max(value, 1)));
+  return 2 ** Math.max(12, exponent);
 }
 
 function fft(real, imag, inverse = false) {
@@ -60,41 +67,66 @@ function fft(real, imag, inverse = false) {
 }
 
 function makePinkTsp(sampleRate, settings) {
-  const pulseLength = Math.round(sampleRate * settings.durationSeconds);
-  const size = nextPowerOfTwo(pulseLength);
-  const real = new Float64Array(size), imag = new Float64Array(size);
-  const maxBin = Math.floor(size / 2);
+  const size = nearestPowerOfTwo(sampleRate * settings.durationSeconds);
+  const half = size / 2;
+  const df = sampleRate / size;
+  const nyquist = sampleRate / 2;
+  const endFrequency = Math.min(settings.endFrequencyHz, nyquist * 0.95);
+  const startFrequency = Math.max(df * 4, Math.min(settings.startFrequencyHz, endFrequency / 4));
+  const lowOctaves = Math.min(EDGE_OCTAVES, Math.log2(startFrequency / df));
+  const highOctaves = Math.min(EDGE_OCTAVES, Math.log2(nyquist / endFrequency));
+  const amplitude = new Float64Array(half + 1);
+  const cumulativeEnergy = new Float64Array(half + 1);
+  let totalEnergy = 0;
 
-  for (let bin = 1; bin < maxBin; bin++) {
-    const frequency = bin * sampleRate / size;
-    if (frequency < settings.startFrequencyHz || frequency > settings.endFrequencyHz) continue;
-    const magnitude = 1 / Math.sqrt(frequency);
-    const phase = -Math.PI * bin * (bin - 1) / size;
-    real[bin] = magnitude * Math.cos(phase);
-    imag[bin] = magnitude * Math.sin(phase);
+  for (let bin = 1; bin < half; bin++) {
+    const frequency = bin * df;
+    let taper = 1;
+    if (frequency < startFrequency) {
+      const position = Math.log2(startFrequency / frequency) / lowOctaves;
+      taper = position >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * position));
+    } else if (frequency > endFrequency) {
+      const position = Math.log2(frequency / endFrequency) / highOctaves;
+      taper = position >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * position));
+    }
+    amplitude[bin] = taper / Math.sqrt(frequency);
+    totalEnergy += amplitude[bin] ** 2;
+    cumulativeEnergy[bin] = totalEnergy;
+  }
+  if (!totalEnergy) throw new Error("TSP信号を生成できませんでした。");
+
+  const tStart = SWEEP_START_RATIO * size / sampleRate;
+  const tSpan = (SWEEP_END_RATIO - SWEEP_START_RATIO) * size / sampleRate;
+  const phase = new Float64Array(half + 1);
+  for (let bin = 0; bin <= half; bin++) {
+    const previousDelay = tStart + tSpan * (cumulativeEnergy[Math.max(0, bin - 1)] / totalEnergy);
+    const currentDelay = tStart + tSpan * (cumulativeEnergy[bin] / totalEnergy);
+    phase[bin] = bin === 0
+      ? 0
+      : phase[bin - 1] - 2 * Math.PI * df * (previousDelay + currentDelay) / 2;
+  }
+
+  const real = new Float64Array(size), imag = new Float64Array(size);
+  for (let bin = 1; bin < half; bin++) {
+    const magnitude = amplitude[bin];
+    if (!magnitude) continue;
+    real[bin] = magnitude * Math.cos(phase[bin]);
+    imag[bin] = magnitude * Math.sin(phase[bin]);
     real[size - bin] = real[bin];
     imag[size - bin] = -imag[bin];
   }
-
   fft(real, imag, true);
-  const signal = new Float32Array(pulseLength);
-  const fadeLength = Math.min(Math.round(sampleRate * 0.01), Math.floor(pulseLength / 4));
-  let sumSquares = 0, peak = 0;
-  for (let i = 0; i < pulseLength; i++) {
-    const fade = Math.min(1, i / fadeLength, (pulseLength - 1 - i) / fadeLength);
-    signal[i] = real[i] * Math.max(0, fade);
-    sumSquares += signal[i] ** 2;
-    peak = Math.max(peak, Math.abs(signal[i]));
-  }
 
-  const rms = Math.sqrt(sumSquares / pulseLength);
-  if (!rms || !peak) throw new Error("TSP信号を生成できませんでした。");
-  const gain = Math.min(OUTPUT_RMS_TARGET / rms, OUTPUT_PEAK_LIMIT / peak);
-  for (let i = 0; i < pulseLength; i++) signal[i] *= gain;
-  return signal;
+  let peak = 0;
+  for (let i = 0; i < size; i++) {
+    peak = Math.max(peak, Math.abs(real[i]));
+  }
+  if (!peak) throw new Error("TSP信号を生成できませんでした。");
+  const normalization = 1 / peak;
+  return Float32Array.from(real, value => value * normalization);
 }
 
-function collectRecording(session, durationSeconds, ctrl) {
+function collectRecording(session, durationSeconds, ctrl, playbackGain) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let recording = true;
@@ -113,12 +145,15 @@ function collectRecording(session, durationSeconds, ctrl) {
       });
     };
 
-    const startAt = session.context.currentTime + 0.5;
+    const startAt = session.context.currentTime + 0.05;
     const source = session.context.createBufferSource();
     const buffer = session.context.createBuffer(1, session.measurementBuffer.length, session.sampleRate);
     buffer.copyToChannel(session.measurementBuffer, 0);
     source.buffer = buffer;
-    source.connect(session.context.destination);
+    const gain = session.context.createGain();
+    gain.gain.value = playbackGain;
+    source.connect(gain);
+    gain.connect(session.context.destination);
     const stopSource = () => {
       if (sourceEnded) return;
       try {
@@ -136,6 +171,7 @@ function collectRecording(session, durationSeconds, ctrl) {
       window.clearTimeout(timeoutId);
       window.clearInterval(cancelId);
       source.disconnect();
+      gain.disconnect();
       session.processor.onaudioprocess = previousHandler;
     };
     source.onended = () => {
@@ -425,12 +461,21 @@ export async function playTspPreview() {
     buffer.copyToChannel(signal, 0);
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(context.destination);
+    const gain = context.createGain();
+    gain.gain.value = MEASUREMENT_SETTINGS.playbackGain;
+    source.connect(gain);
+    gain.connect(context.destination);
     await new Promise((resolve, reject) => {
-      source.onended = resolve;
+      source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+        resolve();
+      };
       try {
         source.start();
       } catch (error) {
+        source.disconnect();
+        gain.disconnect();
         reject(error);
       }
     });
@@ -442,17 +487,24 @@ export async function playTspPreview() {
 export async function runMeasurement(session, ctrl, settings = MEASUREMENT_SETTINGS) {
   const sampleRate = session.sampleRate;
   const pulse = makePinkTsp(sampleRate, settings);
-  const responseLength = Math.round(sampleRate * TAIL_SECONDS);
-  const slotLength = pulse.length + responseLength;
-  const totalLength = slotLength * settings.averages + Math.round(sampleRate * 0.25);
+  const maxTotalLength = Math.floor(sampleRate * MEASUREMENT_SECONDS);
+  const slotLength = Math.floor(maxTotalLength / settings.averages);
+  const responseLength = slotLength - pulse.length;
+  if (responseLength <= 0) {
+    throw new Error("この端末のサンプリングレートでは測定時間内にTSPを再生できません。");
+  }
+  const totalLength = slotLength * settings.averages;
+  if (totalLength > maxTotalLength) {
+    throw new Error("測定時間に対して信号長が長すぎます。");
+  }
   const output = new Float32Array(totalLength);
   for (let average = 0; average < settings.averages; average++) {
     output.set(pulse, average * slotLength);
   }
   session.setMeasurementBuffer(output);
 
-  const captureDuration = output.length / sampleRate + 0.3;
-  const recordingPromise = collectRecording(session, captureDuration, ctrl);
+  const captureDuration = output.length / sampleRate;
+  const recordingPromise = collectRecording(session, captureDuration, ctrl, settings.playbackGain);
   const recording = await recordingPromise;
   if (ctrl.cancelled) throw new Error("cancelled");
 

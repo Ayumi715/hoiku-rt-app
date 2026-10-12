@@ -117,12 +117,12 @@
     <ol class="steps">
       <li>ブラウザーからマイクの使用を求められたら許可してください。マイク入力レベルはdBFSで表示されます。</li>
       <li>端末を胸の高さで持ち、スピーカーとマイクをふさがないようにします。</li>
-      <li>測定信号を測定時に3回再生します。音量は小さめから調整し、不快な音がした場合はすぐに中止してください。</li>
-      <li>「開始」を押すと測定信号を3回再生・録音し、解析完了後に結果画面へ切り替わります。</li>
+      <li>ピンクTSP（信号長約2.73秒、40～16000 Hz）を測定時に3回再生します。最初は端末音量を小さくし、不快な音がした場合はすぐに中止してください。</li>
+      <li>「開始」を押すと測定信号と残響を3回録音します。測定時間は約10.9秒です。</li>
     </ol>
     <button id="previewTspBtn" class="btn secondary" type="button">TSP音源を試聴（1回）</button>
     <div id="previewTspStatus" class="meta" role="status" aria-live="polite"></div>
-    <div class="warn">※表示はデジタル入力レベル(dBFS)です。校正機器なしでは絶対音圧(dB SPL)を測定できません。ブラウザーや端末の音響処理により、測定値が変わる場合があります。</div>
+    <div class="warn">※表示はデジタル入力レベル(dBFS)です。校正機器なしでは絶対音圧(dB SPL)を測定できません。端末内蔵スピーカーでは40 Hz付近の低音を再生できない場合があります。その場合は低域対応スピーカーを使用してください。</div>
   </div>
   <div class="footer"><button class="btn secondary" data-go="checklist">戻る</button><button class="btn primary" data-go="measuring">次へ</button></div>
 </section>
