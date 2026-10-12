@@ -242,9 +242,6 @@ function ensureMicrophone(generation = microphoneGeneration) {
 
 function setupMeasurement() {
   $("measureErr").textContent = "";
-  $("measureBtn").disabled = false;
-  $("measureBtn").querySelector(".btn-text").textContent = "開始";
-  $("measureBtn").setAttribute("aria-label", "測定開始");
   $("levelValue").textContent = "--";
   $("levelFill").style.width = "0%";
   $("levelFill").parentElement.setAttribute("aria-valuenow", "-60");
@@ -262,9 +259,6 @@ function setupMeasurement() {
 
 async function beginMeasurement() {
   $("measureErr").textContent = "";
-  $("measureBtn").disabled = true;
-  $("measureBtn").querySelector(".btn-text").textContent = "測定中…";
-  $("measureBtn").setAttribute("aria-label", "測定中");
   const c = job = { cancelled: false };
   const idx = state.activeIdx;
 
@@ -278,16 +272,12 @@ async function beginMeasurement() {
     location.hash = "result";
   } catch (err) {
     if (!c.cancelled) {
-      $("measureErr").textContent = microphoneError(err);
-      $("measureBtn").disabled = false;
-      $("measureBtn").querySelector(".btn-text").textContent = "再試行";
-      $("measureBtn").setAttribute("aria-label", "測定を再試行");
+      $("measureErr").textContent = `${microphoneError(err)} P5に戻り「測定開始」を押して再試行してください。`;
     }
   } finally {
     if (job === c) job = null;
   }
 }
-$("measureBtn").addEventListener("click", beginMeasurement);
 
 /* ---------- P7 結果 ---------- */
 function renderResult() {
