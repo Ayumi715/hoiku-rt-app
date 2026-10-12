@@ -118,13 +118,13 @@
       <li>ブラウザーからマイクの使用を求められたら許可してください。マイク入力レベルはdBFSで表示されます。</li>
       <li>端末を胸の高さで持ち、スピーカーとマイクをふさがないようにします。</li>
       <li>ピンクTSP（信号長約2.73秒、40～16000 Hz）を測定時に3回再生します。最初は端末音量を小さくし、不快な音がした場合はすぐに中止してください。</li>
-      <li>「開始」を押すと測定信号と残響を3回録音します。測定時間は約10.9秒です。</li>
+      <li>「測定開始」を押すとP6に移動し、自動的に測定信号の再生と録音を開始します。測定時間は約11秒です。</li>
     </ol>
     <button id="previewTspBtn" class="btn secondary" type="button">TSP音源を試聴（1回）</button>
     <div id="previewTspStatus" class="meta" role="status" aria-live="polite"></div>
     <div class="warn">※測定中は静かにしてください。</div>
   </div>
-  <div class="footer"><button class="btn secondary" data-go="checklist">戻る</button><button class="btn primary" data-go="measuring">次へ</button></div>
+  <div class="footer"><button class="btn secondary" data-go="checklist">戻る</button><button class="btn primary" data-go="measuring">測定開始</button></div>
 </section>
 
 <!-- P6 測定 -->
@@ -143,7 +143,7 @@
     <button id="measureBtn" class="measure-btn" type="button" aria-label="測定開始">
       <span class="btn-icon" aria-hidden="true">🎤</span><span class="btn-text">開始</span>
     </button>
-    <p class="meta" style="text-align:center;">測定中は静かにしてください。</p>
+    <p class="meta" style="text-align:center;">画面が変わるまで静かにしてください。</p>
     <div class="error" id="measureErr" role="alert"></div>
   </div>
   <div class="footer"><button class="btn secondary" data-go="position">戻る</button></div>

@@ -38,6 +38,10 @@ document.addEventListener("click", e => {
   const go = e.target.closest("[data-go]");
   if (!go || go.disabled) return;
   if (go.dataset.go === "home") requestHome();
+  else if (go.dataset.go === "measuring" && current === "position") {
+    show("measuring");
+    if (current === "measuring") void beginMeasurement();
+  }
   else location.hash = go.dataset.go;
 });
 $("helpBack").addEventListener("click", () => { location.hash = helpReturn; });
