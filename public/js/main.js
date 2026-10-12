@@ -336,8 +336,11 @@ function saveErrorMessage(error) {
   if (code === "permission-denied") {
     return "Firebaseの保存権限がありません。Firestoreルールがデプロイ済みか、匿名ログインがFirebaseで有効か確認してください。";
   }
-  if (code === "unauthenticated" || code === "auth/operation-not-allowed") {
-    return "ログインできないため保存できません。Firebase Authenticationで匿名ログインを有効にしてください。";
+  if (code === "auth/admin-restricted-operation" || code === "auth/operation-not-allowed") {
+    return "Firebaseで匿名ログインが無効です。Firebase Console > Authentication > Sign-in method > Anonymous を有効にしてから、もう一度保存してください。";
+  }
+  if (code === "unauthenticated") {
+    return "ログインできないため保存できません。ページを再読み込みして、もう一度保存してください。";
   }
   if (code === "unavailable" || code === "deadline-exceeded" || code === "network-request-failed") {
     return "Firebaseに接続できません。ネットワークを確認して、もう一度お試しください。";
