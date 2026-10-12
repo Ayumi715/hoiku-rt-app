@@ -41,11 +41,11 @@
     <p>このアプリは保育施設における残響時間を測定することによって、全国の保育施設の音環境をより良くしていくことを目的に開発されました。以下の手順で進んでいきます。</p>
     <ol class="steps">
       <li><strong>準備</strong>:施設名を含む基本情報の入力、また部屋の寸法を入力します。その後、チェックリストや指示に沿って正確な測定に向けた準備を行います。</li>
-      <li><strong>測定</strong>:アプリから音を鳴らして、部屋の響きを記録します。測定中はできるだけ静かにしてください。</li>
-      <li><strong>結果表示</strong>:残響時間が表示され、データをアップロードすることによって結果が保存されます。その他、測定をやり直すことや別の場所で測定を行うことも出来ます。</li>
+      <li><strong>測定</strong>:ブラウザーのマイク使用を許可し、音量を小さめにしてから測定画面の「開始」を押します。ピンクTSPを再生し、マイクで録音します。</li>
+      <li><strong>結果表示</strong>:録音から算出した残響時間とグラフを確認し、測定名を入力して保存します。測定のやり直しや別の場所での測定もできます。</li>
     </ol>
     <h3>※測定結果のアップロードについて</h3>
-    <p>アップロードするデータには、施設名・所在地・部屋の用途や寸法・測定位置・測定結果・測定日時が含まれています。全国の保育施設の音環境をより良くするため、音響専門家が保育施設の音環境について現状を把握し、施設の比較を行ったり分析を行うことにデータは使われます。本目的以外では使用、公開はしません。</p>
+    <p>アップロードするデータには、施設名・所在地・部屋の用途や寸法・測定位置・測定結果・測定日時が含まれています。録音した音声そのものは保存・送信しません。録音から算出した残響時間などの結果のみを保存します。</p>
     <p>内容を確認したら「次へ」を押してください。</p>
   </div>
   <div class="footer"><button class="btn secondary" data-go="home">戻る</button><button class="btn primary" data-go="info">次へ</button></div>
@@ -115,12 +115,14 @@
 
     <h3>測定ガイド</h3>
     <ol class="steps">
+      <li>ブラウザーからマイクの使用を求められたら許可してください。マイク入力レベルはdBFSで表示されます。</li>
       <li>端末を胸の高さで持ち、スピーカーとマイクをふさがないようにします。</li>
-      <li>「次へ」を押すとすぐに測定が始まり、アプリから音が鳴ります。</li>
-      <li>音が鳴っている間は、その場から動かず、静かにしてください。</li>
-      <li>測定が終わると、自動で結果の画面に切り替わります。</li>
+      <li>測定信号を測定時に3回再生します。音量は小さめから調整し、不快な音がした場合はすぐに中止してください。</li>
+      <li>「開始」を押すと測定信号を3回再生・録音し、解析完了後に結果画面へ切り替わります。</li>
     </ol>
-    <div class="warn">※「次へ」を押すと測定が始まります。準備ができてから押してください。</div>
+    <button id="previewTspBtn" class="btn secondary" type="button">TSP音源を試聴（1回）</button>
+    <div id="previewTspStatus" class="meta" role="status" aria-live="polite"></div>
+    <div class="warn">※表示はデジタル入力レベル(dBFS)です。校正機器なしでは絶対音圧(dB SPL)を測定できません。ブラウザーや端末の音響処理により、測定値が変わる場合があります。</div>
   </div>
   <div class="footer"><button class="btn secondary" data-go="checklist">戻る</button><button class="btn primary" data-go="measuring">次へ</button></div>
 </section>
@@ -128,11 +130,22 @@
 <!-- P6 測定 -->
 <section id="measuring" class="screen">
   <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button></div>
-  <div class="measuring-center">
+  <div class="body">
     <h2>測定</h2>
+    <div class="card">
+      <div class="card-title">マイク入力レベル</div>
+      <div class="level-meter-container">
+        <div class="level-readout"><span class="level-value" id="levelValue">--</span><span class="level-unit">dBFS</span></div>
+        <div class="level-meter" role="meter" aria-label="マイク入力レベル dBFS" aria-valuemin="-60" aria-valuemax="0" aria-valuenow="-60"><div class="level-meter-fill" id="levelFill"></div></div>
+        <div class="level-meter-labels"><span>-60 dBFS</span><span>-40 dBFS</span><span>-20 dBFS</span><span>0 dBFS</span></div>
+      </div>
+    </div>
+    <button id="measureBtn" class="measure-btn" type="button" aria-label="測定開始">
+      <span class="btn-icon" aria-hidden="true">🎤</span><span class="btn-text">開始</span>
+    </button>
     <div class="error" id="measureErr" role="alert"></div>
   </div>
-  <div class="footer"><button class="btn secondary" data-go="position">戻る</button><button class="btn primary" id="measureNext" type="button">次へ</button></div>
+  <div class="footer"><button class="btn secondary" data-go="position">戻る</button></div>
 </section>
 
 <!-- P7 結果 -->
@@ -144,13 +157,29 @@
     <div class="summary two">
       <div>RT60<b id="resRt">-</b></div><div>EDT<b id="resEdt">-</b></div>
     </div>
-    <div class="graph-frame" id="graphFrame" role="img" aria-label="結果グラフ(準備中)">グラフ表示エリア(準備中)</div>
+    <div class="summary two">
+      <div>適合度 R²<b id="r2Value">--</b></div><div>有効性<b id="validValue">未評価</b></div>
+    </div>
     <div class="demo" id="demoNote" hidden>※デモ用の仮の値です。</div>
-    <div class="ok" id="uploadMsg" role="status"></div>
-    <div class="error" id="uploadErr" role="alert"></div>
+    <div class="card">
+      <div class="card-title">インパルス応答 (IR)</div>
+      <canvas id="irChart" class="result-chart" role="img" aria-label="録音から算出したインパルス応答"></canvas>
+      <canvas id="irDbChart" class="result-chart" role="img" aria-label="インパルス応答のエネルギー減衰"></canvas>
+      <div id="irInfo" class="meta"></div>
+    </div>
+    <div class="card"><div class="card-title">エネルギー減衰曲線 (EDC)</div><canvas id="edcChart" class="result-chart" role="img" aria-label="録音から算出したエネルギー減衰曲線"></canvas></div>
+    <div class="card"><div class="card-title">周波数帯別 RT60</div><canvas id="bandChart" class="result-chart" role="img" aria-label="周波数帯別RT60"></canvas></div>
+    <div class="card">
+      <div class="card-title">測定結果を保存</div>
+      <div class="save-form">
+        <label class="field" for="saveName"><span>測定名</span><input type="text" id="saveName" class="save-input" placeholder="例: リビング" maxlength="50"></label>
+        <button id="saveBtn" class="btn primary" type="button">保存</button>
+      </div>
+      <div class="ok" id="uploadMsg" role="status" aria-live="polite"></div>
+      <div class="error" id="uploadErr" role="alert"></div>
+    </div>
   </div>
   <div class="stack">
-    <button class="btn primary" id="uploadBtn" type="button">結果をアップロード</button>
     <button class="btn secondary" id="redoBtn" type="button">同じ場所で測定をやり直す</button>
     <button class="btn secondary" id="otherBtn" type="button">別の場所で測定をする</button>
     <button class="btn secondary" data-go="home">ホームに戻る</button>
@@ -162,9 +191,10 @@
   <div class="topbar"><button class="icon-btn" data-go="home">ホーム</button></div>
   <div class="body">
     <h2>ヘルプ</h2>
-    <p>「測定を始める」から部屋の響きを測定できます。</p>
+    <p>測定時はマイクを使用してピンクTSPを再生・録音します。録音データは端末内で解析し、録音音声そのものは保存・送信しません。</p>
     <h3>残響時間とは</h3>
     <p>音が止まってから、部屋に残った音が元の大きさより60デシベル小さくなるまでの時間です。その場所での音の響きやすさが分かります。</p>
+    <p>マイク入力レベルはdBFS（デジタル信号のレベル）です。絶対音圧をdB SPLで測るには、マイクと端末の校正が別途必要です。</p>
     <h3>保育室で測る理由</h3>
     <p>部屋が響きすぎると声が聞き取りにくくなり、子どもも職員も疲れやすくなります。特に、子どもにとっては発育に関わることもあるため、保育施設の音環境をより良く整えることは重要です。</p>
     <p>アップロードした結果はFirebaseに保存され、同じ端末の匿名ユーザーで保存した結果を「今までの結果」で確認できます。別の端末やブラウザーで保存した結果は表示されません。</p>

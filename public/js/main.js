@@ -2,7 +2,7 @@ import { PREFECTURES, USES, NOTE_USES, CHECKLIST, SAMPLE } from "./config.js";
 import { state, resetFlow, resetAll } from "./state.js";
 import { volume, directDistance, pointCount, layoutPoints } from "./acoustics.js";
 import { planSvg } from "./plan.js";
-import { runMeasurement, DEMO } from "./measurement.js";
+import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
 import { uploadMeasurement, loadHistory } from "./db.js";
 
 const $ = id => document.getElementById(id);
@@ -12,19 +12,23 @@ const el = (tag, text, cls) => { const e = document.createElement(tag); if (text
 /* ---------- 画面遷移 ---------- */
 const SCREENS = ["home", "history", "overview", "info", "checklist", "position", "measuring", "result", "help"];
 const NEEDS_DATA = ["checklist", "position", "measuring", "result"];
-let current = "home", helpReturn = "home", job = null, pending = null;
+let current = "home", helpReturn = "home", job = null;
+let audioSession = null, microphonePromise = null, microphonePromiseGeneration = -1, microphoneGeneration = 0;
 
 function show(id) {
   if (!SCREENS.includes(id) || (NEEDS_DATA.includes(id) && !state.ready)) id = "home";
   if (id === "result" && !state.results[state.activeIdx]) id = state.ready ? "position" : "home";
   if (location.hash.slice(1) !== id) history.replaceState(null, "", "#" + id);
   if (id === "help" && current !== "help") helpReturn = current;
-  if (current === "measuring" && id !== "measuring" && job) job.cancelled = true;
+  if (current === "measuring" && id !== "measuring") {
+    if (job) job.cancelled = true;
+    releaseMicrophone();
+  }
   current = id;
   document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
   window.scrollTo(0, 0);
   if (id === "position") renderPosition();
-  if (id === "measuring") startMeasurement();
+  if (id === "measuring") setupMeasurement();
   if (id === "result") renderResult();
   if (id === "history") renderHistory();
 }
@@ -167,25 +171,119 @@ $("planPos").addEventListener("click", e => {
   renderPosition();
 });
 
+$("previewTspBtn").addEventListener("click", async () => {
+  const button = $("previewTspBtn");
+  const status = $("previewTspStatus");
+  button.disabled = true;
+  status.textContent = "TSPを1回再生しています。";
+  try {
+    await playTspPreview();
+    status.textContent = "試聴が完了しました。";
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message || "試聴を再生できませんでした。";
+  } finally {
+    button.disabled = false;
+  }
+});
+
 /* ---------- P6 測定 ---------- */
-function startMeasurement() {
+function releaseMicrophone() {
+  microphoneGeneration++;
+  const session = audioSession;
+  audioSession = null;
+  if (session) session.stop().catch(error => console.error("マイクの終了に失敗しました。", error));
+}
+
+function showInputLevel(dbfs) {
+  if (current !== "measuring") return;
+  $("levelValue").textContent = dbfs.toFixed(1);
+  $("levelFill").style.width = `${((dbfs + 60) / 60) * 100}%`;
+  $("levelFill").parentElement.setAttribute("aria-valuenow", String(Math.round(dbfs)));
+}
+
+function microphoneError(error) {
+  console.error(error);
+  if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+    return "マイクの使用が許可されていません。ブラウザーのサイト設定からマイクを許可してください。";
+  }
+  if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+    return "マイクが見つかりません。マイクを接続してから再試行してください。";
+  }
+  return error.message || "マイクを開始できませんでした。";
+}
+
+function ensureMicrophone(generation = microphoneGeneration) {
+  if (audioSession) return Promise.resolve(audioSession);
+  if (microphonePromise && microphonePromiseGeneration === generation) return microphonePromise;
+  if (!microphonePromise || microphonePromiseGeneration !== generation) {
+    const opening = openMicrophone(showInputLevel).then(async session => {
+      if (generation !== microphoneGeneration || current !== "measuring") {
+        await session.stop();
+        return null;
+      }
+      audioSession = session;
+      return session;
+    }).finally(() => {
+      if (microphonePromise === opening) {
+        microphonePromise = null;
+        microphonePromiseGeneration = -1;
+      }
+    });
+    microphonePromise = opening;
+    microphonePromiseGeneration = generation;
+  }
+  return microphonePromise;
+}
+
+function setupMeasurement() {
   $("measureErr").textContent = "";
-  $("measureNext").disabled = false;
+  $("measureBtn").disabled = false;
+  $("measureBtn").querySelector(".btn-text").textContent = "開始";
+  $("measureBtn").setAttribute("aria-label", "測定開始");
+  $("levelValue").textContent = "--";
+  $("levelFill").style.width = "0%";
+  $("levelFill").parentElement.setAttribute("aria-valuenow", "-60");
+  releaseMicrophone();
+  const generation = microphoneGeneration;
+  ensureMicrophone(generation).then(session => {
+    if (!session || generation !== microphoneGeneration) return;
+    $("measureErr").textContent = "";
+  }).catch(error => {
+    if (generation === microphoneGeneration && current === "measuring") {
+      $("measureErr").textContent = microphoneError(error);
+    }
+  });
+}
+
+async function beginMeasurement() {
+  $("measureErr").textContent = "";
+  $("measureBtn").disabled = true;
+  $("measureBtn").querySelector(".btn-text").textContent = "測定中…";
+  $("measureBtn").setAttribute("aria-label", "測定中");
   const c = job = { cancelled: false };
   const idx = state.activeIdx;
-  pending = runMeasurement(c).then(res => {
-    if (c.cancelled) return false;
+
+  try {
+    const session = await ensureMicrophone();
+    if (!session || c.cancelled || current !== "measuring") return;
+    await session.resume();
+    const res = await runMeasurement(session, c, MEASUREMENT_SETTINGS);
+    if (c.cancelled || current !== "measuring") return;
     state.results[idx] = { ...res, measuredAt: new Date(), uploaded: false };
-    return true;
-  }).catch(err => { if (!c.cancelled) console.error(err); return false; });
+    location.hash = "result";
+  } catch (err) {
+    if (!c.cancelled) {
+      $("measureErr").textContent = microphoneError(err);
+      $("measureBtn").disabled = false;
+      $("measureBtn").querySelector(".btn-text").textContent = "再試行";
+      $("measureBtn").setAttribute("aria-label", "測定を再試行");
+    }
+  } finally {
+    if (job === c) job = null;
+  }
 }
-$("measureNext").addEventListener("click", async () => {
-  $("measureNext").disabled = true;
-  const ok = await pending;
-  if (current !== "measuring") return;
-  if (ok) location.hash = "result";
-  else { $("measureErr").textContent = "測定に失敗しました。戻ってもう一度お試しください。"; $("measureNext").disabled = false; }
-});
+$("measureBtn").addEventListener("click", beginMeasurement);
 
 /* ---------- P7 結果 ---------- */
 function renderResult() {
@@ -195,29 +293,98 @@ function renderResult() {
     `測定点 ${state.activeIdx + 1} / ${r.measuredAt.toLocaleString("ja-JP")}`;
   $("resRt").textContent = fmt(r.rt60) + " 秒";
   $("resEdt").textContent = fmt(r.edt) + " 秒";
+  $("r2Value").textContent = r.r2 == null ? "--" : `${fmt(r.r2 * 100)}%`;
+  $("validValue").textContent = r.valid == null ? "未評価" : (r.valid ? "有効" : "再測定推奨");
+  $("irInfo").textContent = r.sampleRate
+    ? `マイク録音から解析（${r.sampleRate.toLocaleString("ja-JP")} Hz）。入力レベルはdBFS表示で、校正済みの音圧レベル(dB SPL)ではありません。`
+    : "マイク録音から解析したインパルス応答です。";
   $("demoNote").hidden = !DEMO;
   $("uploadErr").textContent = "";
   updateUploadUI();
+  drawResultCharts(r);
+  if (!$("saveName").value) $("saveName").value = `${state.use} 測定点${state.activeIdx + 1}`;
 }
 function updateUploadUI() {
   const r = state.results[state.activeIdx];
-  $("uploadBtn").disabled = r.uploaded;
-  $("uploadBtn").textContent = r.uploaded ? "アップロード済み" : "結果をアップロード";
-  $("uploadMsg").textContent = r.uploaded ? "✓ 結果をアップロードしました。" : "";
+  $("saveBtn").disabled = r.uploaded;
+  $("saveBtn").textContent = r.uploaded ? "保存済み" : "保存";
+  $("uploadMsg").textContent = r.uploaded ? "✓ 測定結果を保存しました。" : "";
 }
-$("uploadBtn").addEventListener("click", async () => {
+$("saveBtn").addEventListener("click", async () => {
   const idx = state.activeIdx;
-  $("uploadBtn").disabled = true;
-  $("uploadBtn").textContent = "アップロード中…";
+  const name = $("saveName").value.trim();
+  if (!name) {
+    $("uploadErr").textContent = "測定名を入力してください。";
+    $("saveName").focus();
+    return;
+  }
+  $("saveBtn").disabled = true;
+  $("saveBtn").textContent = "保存中…";
   $("uploadErr").textContent = "";
   try {
-    await uploadMeasurement(state, idx);
+    await uploadMeasurement(state, idx, name);
     state.results[idx].uploaded = true;
   } catch (err) {
     console.error(err);
-    $("uploadErr").textContent = "アップロードに失敗しました。通信状況を確認して、もう一度お試しください。";
+    $("uploadErr").textContent = "保存に失敗しました。通信状況を確認して、もう一度お試しください。";
   }
   if (current === "result" && state.activeIdx === idx) updateUploadUI();
+});
+
+function drawLineChart(canvas, values, { min, max, color, yLabel, xLabel }) {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = rect.width, height = 210;
+  canvas.width = Math.floor(width * ratio);
+  canvas.height = Math.floor(height * ratio);
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  const styles = getComputedStyle(document.documentElement);
+  const ink = styles.getPropertyValue("--muted").trim();
+  const line = styles.getPropertyValue("--line").trim();
+  const left = 42, right = width - 12, top = 14, bottom = height - 32;
+  ctx.font = "11px sans-serif";
+  ctx.fillStyle = ink;
+  ctx.strokeStyle = line;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) {
+    const y = top + (bottom - top) * i / 3;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+    ctx.fillText(String(Math.round(max - (max - min) * i / 3)), 2, y + 4);
+  }
+  ctx.fillText(xLabel, right - 44, height - 5);
+  ctx.save();
+  ctx.translate(11, (top + bottom) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.fillText(yLabel, 0, 0);
+  ctx.restore();
+  ctx.strokeStyle = color || styles.getPropertyValue("--accent").trim();
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  values.forEach((value, i) => {
+    const x = left + (right - left) * i / Math.max(1, values.length - 1);
+    const y = bottom - (value - min) / (max - min) * (bottom - top);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawResultCharts(r) {
+  drawLineChart($("irChart"), r.ir, { min: -1, max: 1, yLabel: "振幅", xLabel: "時間", color: "#0f766e" });
+  drawLineChart($("irDbChart"), r.edc, { min: -60, max: 0, yLabel: "相対レベル (dB)", xLabel: "時間", color: "#c24175" });
+  drawLineChart($("edcChart"), r.edc, { min: -60, max: 0, yLabel: "相対レベル (dB)", xLabel: "時間", color: "#2563eb" });
+  const bandValues = r.bands.map(b => b.rt60);
+  drawLineChart($("bandChart"), bandValues, {
+    min: 0, max: Math.max(...bandValues) * 1.2, yLabel: "RT60 (秒)", xLabel: "低域 → 高域", color: "#9333ea"
+  });
+}
+window.addEventListener("resize", () => {
+  if (current === "result") drawResultCharts(state.results[state.activeIdx]);
 });
 // 同じ場所でやり直す(同じ測定点)
 $("redoBtn").addEventListener("click", () => {
@@ -272,7 +439,7 @@ function historyCard(f) {
   );
   f.measurements.forEach(m => {
     const row = el("p", null, "row");
-    row.append(el("span", `測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`), el("strong", `RT60 ${fmt(m.rt60)} 秒`));
+    row.append(el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`), el("strong", `RT60 ${fmt(m.rt60)} 秒`));
     c.append(row);
   });
   return c;

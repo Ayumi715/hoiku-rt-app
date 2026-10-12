@@ -16,7 +16,7 @@ export function ensureUser() {
 }
 
 // 1測定点ぶんを保存。施設は初回のみ作成し、同じ施設IDを使い回す
-export async function uploadMeasurement(state, idx) {
+export async function uploadMeasurement(state, idx, name) {
   const user = await ensureUser();
   const r = state.results[idx];
   const batch = db.batch();
@@ -45,6 +45,7 @@ export async function uploadMeasurement(state, idx) {
   const mRef = db.collection("measurements").doc();
   batch.set(mRef, {
     measurementId: mRef.id,
+    name,
     facilityId,
     measuredAt: Timestamp.fromDate(r.measuredAt),
     pointIndex: idx + 1,
