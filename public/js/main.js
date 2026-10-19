@@ -222,7 +222,9 @@ function renderPosition() {
   });
   if (state.roomShape === "concave") {
     $("positionTitle").textContent = redoMode
-      ? "再測定する部屋を選択"
+      ? redoRoomSelected
+        ? `部屋${state.activeIdx + 1}の再測定位置`
+        : "再測定する部屋を選択"
       : `部屋${state.activeIdx + 1}の測定位置`;
     $("posNote").textContent = redoMode
       ? redoRoomSelected
@@ -386,6 +388,7 @@ function renderResult() {
   $("concaveResults").hidden = !isConcave;
   $("singleIrCard").hidden = isConcave;
   $("singleSaveCard").hidden = isConcave;
+  $("redoBtn").textContent = isConcave ? "2部屋を同時に測定し直す" : "同じ場所で測定をやり直す";
   $("resRt").textContent = fmt(r.rt60) + " 秒";
   $("resEdt").textContent = fmt(r.edt) + " 秒";
   if (isConcave) {
@@ -433,6 +436,13 @@ function renderConcaveResults() {
     canvas.setAttribute("aria-label", `${label}のインパルス応答`);
     canvas.dataset.resultIndex = String(readingIndex);
     card.append(summary, quality, canvas);
+    if (readingIndex > 0) {
+      const roomIndex = readingIndex - 1;
+      const redoButton = el("button", "同じ場所で測定をやり直す", "btn secondary");
+      redoButton.type = "button";
+      redoButton.addEventListener("click", () => redoConcaveRoom(roomIndex));
+      card.appendChild(redoButton);
+    }
     root.appendChild(card);
     drawImpulseResponse(result, canvas);
   });
@@ -508,6 +518,12 @@ async function saveConcaveBundle(nameInput, button, status, error) {
     button.disabled = false;
     button.textContent = "保存";
   }
+}
+function redoConcaveRoom(roomIndex) {
+  state.activeIdx = roomIndex;
+  redoMode = true;
+  redoRoomSelected = true;
+  location.hash = "position";
 }
 function updateUploadUI() {
   const r = state.results[state.activeIdx];
@@ -622,7 +638,10 @@ window.addEventListener("resize", () => {
 // 同じ場所でやり直す(同じ測定点)
 $("redoBtn").addEventListener("click", () => {
   if (state.roomShape === "concave") {
-    redoMode = true;
+    state.results = {};
+    state.trials = {};
+    state.activeIdx = 0;
+    redoMode = false;
     redoRoomSelected = false;
   } else {
     delete state.results[state.activeIdx];

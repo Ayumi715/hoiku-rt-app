@@ -18,7 +18,6 @@
     <h1>残響時間測定アプリ</h1>
     <button class="btn primary" data-go="overview">測定を始める</button>
     <button class="btn secondary" data-go="history">今までの結果</button>
-    <p class="meta">※iPhone推奨です。</p>
   </div>
 </main>
 
@@ -60,7 +59,7 @@
     <button class="btn secondary" id="fillSample" type="button">サンプル情報を入力</button>
 
     <div class="section-title">施設</div>
-    <label class="field"><span>施設名</span><input id="facility" type="text" placeholder="例:○○保育園" autocomplete="off"></label>
+    <label class="field"><span>施設名</span><input id="facility" type="text" placeholder="例:○○保育園（名称のみ）" autocomplete="off"></label>
     <div class="grid2">
       <label class="field"><span>県</span><select id="pref"><option value="">選択してください</option></select></label>
       <label class="field"><span>市町村</span><input id="city" type="text" placeholder="例:習志野市" autocomplete="off"></label>
@@ -148,8 +147,8 @@
     <ol class="steps">
       <li>ブラウザーからマイクの使用を求められたら許可してください。マイク入力レベルはdBFSで表示されます。</li>
       <li>端末を胸の高さで持ち、マイクを下に向け縦に持ちます。また、マイクがふさがないようにします。</li>
-      <li>音源(ピンクTSP)を測定時に1回再生します。</li>
-      <li>「測定開始」を押すと測定画面に移動し、自動的に測定信号の再生と録音を開始します。測定時間は約4秒です。</li>
+      <li>音源(ピンクTSP)を測定時に3回再生します。</li>
+      <li>「測定開始」を押すと測定画面に移動し、自動的に測定信号の再生と録音を開始します。測定時間は約11秒です。</li>
     </ol>
     <button id="previewTspBtn" class="btn secondary" type="button">音源を試聴（1回）</button>
     <div id="previewTspStatus" class="meta" role="status" aria-live="polite"></div>
