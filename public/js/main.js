@@ -256,7 +256,7 @@ $("previewTspBtn").addEventListener("click", async () => {
   const button = $("previewTspBtn");
   const status = $("previewTspStatus");
   button.disabled = true;
-  status.textContent = "TSPを3回再生しています（約11秒）。";
+  status.textContent = "TSPを1回再生しています。";
   try {
     await playTspPreview();
     status.textContent = "試聴が完了しました。";
@@ -577,7 +577,7 @@ function saveErrorMessage(error) {
 
 function drawImpulseResponse(r, canvas = $("irChart")) {
   const rect = canvas.getBoundingClientRect();
-  if (!rect.width) return;
+  if (!rect.width || !r.ir || !r.ir.length) return;
   const ratio = window.devicePixelRatio || 1;
   const width = rect.width, height = 210;
   canvas.width = Math.floor(width * ratio);
@@ -619,6 +619,12 @@ function drawImpulseResponse(r, canvas = $("irChart")) {
   ctx.stroke();
 }
 window.addEventListener("resize", () => {
+  if (current === "history") {
+    document.querySelectorAll("#historyList canvas[data-history-ir]").forEach(canvas => {
+      drawImpulseResponse({ ir: JSON.parse(canvas.dataset.historyIr) }, canvas);
+    });
+    return;
+  }
   if (current !== "result") return;
   if (state.roomShape === "concave") {
     document.querySelectorAll("#concaveResults canvas[data-result-index]").forEach(canvas => {
@@ -679,6 +685,9 @@ async function renderHistory() {
     if (!items.length) { st.textContent = "この端末では、まだアップロード済みの測定結果がありません。"; return; }
     st.textContent = `${items.length}件の施設`;
     items.forEach(f => list.appendChild(historyCard(f)));
+    list.querySelectorAll("canvas[data-history-ir]").forEach(canvas => {
+      drawImpulseResponse({ ir: JSON.parse(canvas.dataset.historyIr) }, canvas);
+    });
   } catch (e) {
     console.error(e);
     st.textContent = "結果を読み込めませんでした。通信状況を確認して、再読み込みしてください。";
@@ -686,31 +695,32 @@ async function renderHistory() {
 }
 function historyCard(f) {
   const c = el("article", null, "card");
-  const use = f.room.use + (f.room.useNote ? `(${f.room.useNote})` : "");
   c.append(
     el("h3", f.name),
-    el("p", `${f.prefecture}${f.city} / ${use}`, "meta"),
-    el("p", `室容積 ${fmt(f.volume)} ㎥`, "meta")
+    el("p", `県: ${f.prefecture}`, "meta"),
+    el("p", `市区町村: ${f.city}`, "meta")
   );
   f.measurements.forEach(m => {
-    const row = el("p", null, "row");
-    if (m.resultSets) {
-      const average = m.resultSets.find(result => result.key === "average");
-      const date = m.measuredAt.toDate().toLocaleDateString("ja-JP");
-      row.append(
-        el("span", `${m.name ? m.name + " / " : ""}部屋1・部屋2・平均(${date})`),
-        el("strong", `平均 RT60 ${fmt(average.rt60)} 秒`)
-      );
-      c.append(row, el("p", m.resultSets.map(result =>
-        `${result.label}: RT60 ${fmt(result.rt60)} 秒 / EDT ${fmt(result.edt)} 秒 / 適合度 R² ${fmt(result.r2 * 100)}%`
-      ).join("　"), "meta"));
+    const result = el("section", null, "card");
+    result.appendChild(el("h3", `測定名: ${m.name || "未設定"}`));
+    const average = m.resultSets && m.resultSets.find(set => set.key === "average");
+    result.append(
+      el("p", `RT60: ${fmt(average ? average.rt60 : m.rt60)} 秒`, "meta"),
+      el("p", `EDT: ${fmt(average ? average.edt : m.edt)} 秒`, "meta")
+    );
+    const ir = average ? average.ir : m.ir;
+    if (Array.isArray(ir) && ir.length) {
+      const title = el("div", average ? "インパルス応答 (2部屋平均)" : "インパルス応答 (IR)", "card-title");
+      const canvas = document.createElement("canvas");
+      canvas.className = "result-chart";
+      canvas.dataset.historyIr = JSON.stringify(ir);
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", average ? "2部屋平均のインパルス応答" : "測定結果のインパルス応答");
+      result.append(title, canvas);
     } else {
-      row.append(
-        el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`),
-        el("strong", `RT60 ${fmt(m.rt60)} 秒`)
-      );
-      c.append(row);
+      result.appendChild(el("p", "この測定にはグラフデータが保存されていません。", "meta"));
     }
+    c.appendChild(result);
   });
   return c;
 }

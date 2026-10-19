@@ -36,6 +36,8 @@ export async function uploadMeasurement(state, idx, name) {
     r2: r.r2,
     valid: r.valid,
     bands: r.bands,
+    ir: Array.from(r.ir),
+    sampleRate: r.sampleRate,
     trials: r.trials ? r.trials.map(({ rt60, edt }) => ({ rt60, edt })) : [],
     ownerUid: user.uid,
     createdAt: FieldValue.serverTimestamp()

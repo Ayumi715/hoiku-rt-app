@@ -474,10 +474,9 @@ export async function playTspPreview() {
   try {
     await context.resume();
     if (context.state !== "running") throw new Error("音声を再生できません。ブラウザーの音声設定を確認してください。");
-    const pulse = makePinkTsp(context.sampleRate, MEASUREMENT_SETTINGS);
-    const { output } = buildRepeatedSignal(pulse, context.sampleRate, MEASUREMENT_SETTINGS);
-    const buffer = context.createBuffer(1, output.length, context.sampleRate);
-    buffer.copyToChannel(output, 0);
+    const signal = makePinkTsp(context.sampleRate, MEASUREMENT_SETTINGS);
+    const buffer = context.createBuffer(1, signal.length, context.sampleRate);
+    buffer.copyToChannel(signal, 0);
     const source = context.createBufferSource();
     source.buffer = buffer;
     const gain = context.createGain();
