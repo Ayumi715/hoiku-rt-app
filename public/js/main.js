@@ -141,11 +141,18 @@ function drawPlan() {
   if (msg) { invalidate(); return; }
 
   const V = area * H;
+  const points = roomShape === "concave"
+    ? sections.map((section, roomIndex) => ({
+        x: section.x + section.width / 2,
+        y: section.y + section.depth / 2,
+        roomIndex
+      }))
+    : [roomCenter(sections)];
   Object.assign(state, {
     ready: true, facility, pref, city, use, useNote,
     roomShape, sections,
     depth: D, width: W, height: H, volume: V, dc: directDistance(V),
-    points: [roomCenter(sections)], activeIdx: 0, results: {}, facilityId: null
+    points, activeIdx: 0, results: {}, facilityId: null
   });
   $("plan").innerHTML = planSvg(W, D, { sections });
   $("sDims").textContent = roomShape === "concave"
@@ -196,7 +203,9 @@ updateChecklist();
 function renderPosition() {
   const doneIdx = Object.keys(state.results).map(Number);
   $("planPos").innerHTML = planSvg(state.width, state.depth, { points: state.points, active: state.activeIdx, done: doneIdx, sections: state.sections });
-  $("posNote").textContent = "部屋の中央に立ってください。";
+  $("posNote").textContent = state.roomShape === "concave"
+    ? "部屋1と部屋2、それぞれの中央に立ってください。図の番号をタップすると測定する部屋を切り替えられます。"
+    : "部屋の中央に立ってください。";
 }
 $("planPos").addEventListener("click", e => {
   const g = e.target.closest("[data-point]");
@@ -325,7 +334,7 @@ function renderResult() {
   $("demoNote").hidden = !DEMO;
   $("uploadErr").textContent = "";
   updateUploadUI();
-  drawResultCharts(r);
+  drawImpulseResponse(r);
   if (!$("saveName").value) $("saveName").value = `${state.use} 測定点${state.activeIdx + 1}`;
 }
 function updateUploadUI() {
@@ -378,7 +387,8 @@ function saveErrorMessage(error) {
     : "保存に失敗しました。ブラウザーの開発者ツールでFirebaseのエラーを確認してください。";
 }
 
-function drawLineChart(canvas, values, { min, max, color, yLabel, xLabel }) {
+function drawImpulseResponse(r) {
+  const canvas = $("irChart");
   const rect = canvas.getBoundingClientRect();
   if (!rect.width) return;
   const ratio = window.devicePixelRatio || 1;
@@ -390,49 +400,41 @@ function drawLineChart(canvas, values, { min, max, color, yLabel, xLabel }) {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, width, height);
   const styles = getComputedStyle(document.documentElement);
-  const ink = styles.getPropertyValue("--muted").trim();
+  const muted = styles.getPropertyValue("--muted").trim();
   const line = styles.getPropertyValue("--line").trim();
   const left = 42, right = width - 12, top = 14, bottom = height - 32;
   ctx.font = "11px sans-serif";
-  ctx.fillStyle = ink;
+  ctx.fillStyle = muted;
   ctx.strokeStyle = line;
   ctx.lineWidth = 1;
-  for (let i = 0; i <= 3; i++) {
-    const y = top + (bottom - top) * i / 3;
+  for (let i = 0; i <= 4; i++) {
+    const y = top + (bottom - top) * i / 4;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-    ctx.fillText(String(Math.round(max - (max - min) * i / 3)), 2, y + 4);
+    ctx.fillText(String(1 - i / 2), 2, y + 4);
   }
-  ctx.fillText(xLabel, right - 44, height - 5);
+  ctx.fillText("時間", right - 30, height - 5);
   ctx.save();
   ctx.translate(11, (top + bottom) / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = "center";
-  ctx.fillText(yLabel, 0, 0);
+  ctx.fillText("振幅", 0, 0);
   ctx.restore();
-  ctx.strokeStyle = color || styles.getPropertyValue("--accent").trim();
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#0f766e";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  values.forEach((value, i) => {
-    const x = left + (right - left) * i / Math.max(1, values.length - 1);
-    const y = bottom - (value - min) / (max - min) * (bottom - top);
+  const stride = Math.max(1, Math.ceil(r.ir.length / Math.max(1, right - left)));
+  for (let i = 0; i < r.ir.length; i += stride) {
+    const x = left + (right - left) * i / Math.max(1, r.ir.length - 1);
+    const y = bottom - (r.ir[i] + 1) / 2 * (bottom - top);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
-  });
+  }
   ctx.stroke();
 }
-
-function drawResultCharts(r) {
-  drawLineChart($("irChart"), r.ir, { min: -1, max: 1, yLabel: "振幅", xLabel: "時間", color: "#0f766e" });
-  drawLineChart($("irDbChart"), r.edc, { min: -60, max: 0, yLabel: "相対レベル (dB)", xLabel: "時間", color: "#c24175" });
-  drawLineChart($("edcChart"), r.edc, { min: -60, max: 0, yLabel: "相対レベル (dB)", xLabel: "時間", color: "#2563eb" });
-  const bandValues = r.bands.map(b => b.rt60);
-  drawLineChart($("bandChart"), bandValues, {
-    min: 0, max: Math.max(...bandValues) * 1.2, yLabel: "RT60 (秒)", xLabel: "低域 → 高域", color: "#9333ea"
-  });
-}
 window.addEventListener("resize", () => {
-  if (current === "result") drawResultCharts(state.results[state.activeIdx]);
+  if (current === "result" && state.results[state.activeIdx]) drawImpulseResponse(state.results[state.activeIdx]);
 });
+
 // 同じ場所でやり直す(同じ測定点)
 $("redoBtn").addEventListener("click", () => {
   delete state.results[state.activeIdx];
@@ -487,7 +489,10 @@ function historyCard(f) {
   );
   f.measurements.forEach(m => {
     const row = el("p", null, "row");
-    row.append(el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`), el("strong", `RT60 ${fmt(m.rt60)} 秒`));
+    row.append(
+      el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`),
+      el("strong", `RT60 ${fmt(m.rt60)} 秒`)
+    );
     c.append(row);
   });
   return c;
