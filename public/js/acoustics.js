@@ -22,3 +22,28 @@ export function layoutPoints(W, D, n) {
   }
   return pts;
 }
+
+export function layoutPointsInSections(sections, n) {
+  if (sections.length === 1) {
+    const section = sections[0];
+    return layoutPoints(section.width, section.depth, n).map(p => ({
+      ...p, x: p.x + section.x, y: p.y + section.y, roomIndex: 0, localX: p.x, localY: p.y
+    }));
+  }
+
+  const [first, second] = sections;
+  const firstArea = first.width * first.depth;
+  const totalArea = firstArea + second.width * second.depth;
+  const firstCount = Math.max(1, Math.min(n - 1, Math.round(n * firstArea / totalArea)));
+  return sections.flatMap((section, index) =>
+    layoutPoints(section.width, section.depth, index === 0 ? firstCount : n - firstCount)
+      .map(p => ({
+        ...p,
+        x: p.x + section.x,
+        y: p.y + section.y,
+        roomIndex: index,
+        localX: p.x,
+        localY: p.y
+      }))
+  );
+}

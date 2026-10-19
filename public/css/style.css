@@ -44,6 +44,14 @@ h3{font-size:17px;margin:8px 0 0}
 .field input,.field select{width:100%;font:inherit;font-size:16px;padding:13px;border-radius:10px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.shape-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0;padding:0;border:0}
+.shape-picker legend{grid-column:1/-1;font-size:14px;font-weight:600;margin-bottom:8px}
+.shape-choice{display:flex;align-items:center;gap:8px;padding:10px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer}
+.shape-choice:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.shape-choice input{flex:none;width:18px;height:18px;accent-color:var(--accent)}
+.shape-choice span{display:flex;flex:1;flex-direction:column;align-items:center;gap:4px}
+.shape-choice svg{width:100%;height:54px;color:var(--accent)}
+.shape-choice b{font-size:14px}
 
 .plan-wrap{border:1.5px solid var(--line);border-radius:14px;background:var(--panel);padding:12px}
 .plan-wrap svg{width:100%;height:auto;display:block;color:var(--ink)}

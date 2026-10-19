@@ -69,12 +69,47 @@
     <label class="field"><span>部屋の用途</span><select id="use"><option value="">選択してください</option></select></label>
     <label class="field" id="useNoteWrap" hidden><span>自由記述</span><input id="useNote" type="text" placeholder="例:0歳児クラス" autocomplete="off"></label>
 
-    <div class="grid3">
+    <fieldset class="shape-picker">
+      <legend>部屋の形</legend>
+      <label class="shape-choice">
+        <input type="radio" name="roomShape" value="rectangular" checked>
+        <span>
+          <svg viewBox="0 0 100 68" role="img" aria-label="長方形の間取り図">
+            <rect x="20" y="10" width="60" height="48" fill="none" stroke="currentColor" stroke-width="4"/>
+          </svg>
+          <b>長方形型</b>
+        </span>
+      </label>
+      <label class="shape-choice">
+        <input type="radio" name="roomShape" value="concave">
+        <span>
+          <svg viewBox="0 0 100 68" role="img" aria-label="凹凸型（L字）の間取り図">
+            <path d="M15 10h38v22h32v26H15z" fill="none" stroke="currentColor" stroke-width="4"/>
+          </svg>
+          <b>凹凸型</b>
+        </span>
+      </label>
+    </fieldset>
+
+    <div id="rectRoomFields" class="grid2">
       <label class="field"><span>奥行 (m)</span><input id="depth" type="text" inputmode="decimal" placeholder="例:5"></label>
       <label class="field"><span>幅 (m)</span><input id="width" type="text" inputmode="decimal" placeholder="例:7"></label>
-      <label class="field"><span>高さ (m)</span><input id="height" type="text" inputmode="decimal" placeholder="例:3"></label>
     </div>
-    <div class="hint">寸法はメートル単位で入力してください(小数可)。</div>
+    <div id="concaveRoomFields" hidden>
+      <div class="section-title">部屋1</div>
+      <div class="grid2">
+        <label class="field"><span>奥行 (m)</span><input id="depth1" type="text" inputmode="decimal" placeholder="例:5"></label>
+        <label class="field"><span>幅 (m)</span><input id="width1" type="text" inputmode="decimal" placeholder="例:7"></label>
+      </div>
+      <div class="section-title">部屋2</div>
+      <div class="grid2">
+        <label class="field"><span>奥行 (m)</span><input id="depth2" type="text" inputmode="decimal" placeholder="例:3"></label>
+        <label class="field"><span>幅 (m)</span><input id="width2" type="text" inputmode="decimal" placeholder="例:4"></label>
+      </div>
+      <div class="hint">2部屋を幅方向に並べ、下辺をそろえて配置します。奥行が同じ場合は長方形になります。</div>
+    </div>
+    <label class="field"><span>高さ (m)</span><input id="height" type="text" inputmode="decimal" placeholder="例:3"></label>
+    <div class="hint">寸法はメートル単位で入力してください(小数可)。凹凸型の高さは2部屋共通です。</div>
 
     <div class="error" id="err" role="alert"></div>
     <button class="btn primary" id="drawBtn" type="button">間取り図を表示</button>
@@ -84,6 +119,7 @@
       <div class="summary">
         <div>床面積<b id="sArea">-</b></div><div>室容積<b id="sVol">-</b></div><div>周長<b id="sPer">-</b></div>
       </div>
+      <div class="meta" id="sDims"></div>
     </div>
   </div>
   <div class="footer"><button class="btn secondary" data-go="overview">戻る</button><button class="btn primary" id="nextInfo" data-go="checklist" disabled>次へ</button></div>
@@ -117,7 +153,7 @@
     <ol class="steps">
       <li>ブラウザーからマイクの使用を求められたら許可してください。マイク入力レベルはdBFSで表示されます。</li>
       <li>端末を胸の高さで持ち、マイクを下に向け縦に持ちます。また、マイクがふさがないようにします。</li>
-      <li>音源(ピンクTSP)を測定時に3回再生します。不快な音がした場合はすぐに中止してください。</li>
+      <li>音源(ピンクTSP)を測定時に3回再生します。</li>
       <li>「測定開始」を押すと測定画面に移動し、自動的に測定信号の再生と録音を開始します。測定時間は約11秒です。</li>
     </ol>
     <button id="previewTspBtn" class="btn secondary" type="button">音源を試聴（1回）</button>

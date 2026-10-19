@@ -35,7 +35,9 @@ export async function uploadMeasurement(state, idx, name) {
       directDistance: state.dc,
       room: {
         use: state.use, useNote: state.useNote,
-        depth: state.depth, width: state.width, height: state.height
+        shape: state.roomShape,
+        depth: state.depth, width: state.width, height: state.height,
+        sections: state.sections.map(({ x, y, width, depth }) => ({ x, y, width, depth }))
       },
       ownerUid: user.uid,
       createdAt: FieldValue.serverTimestamp()

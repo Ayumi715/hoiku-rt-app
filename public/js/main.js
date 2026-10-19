@@ -1,6 +1,6 @@
 import { PREFECTURES, USES, NOTE_USES, CHECKLIST, SAMPLE } from "./config.js";
 import { state, resetFlow, resetAll } from "./state.js";
-import { volume, directDistance, pointCount, layoutPoints } from "./acoustics.js";
+import { directDistance, pointCount, layoutPointsInSections } from "./acoustics.js";
 import { planSvg } from "./plan.js";
 import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
 import { uploadMeasurement, loadHistory } from "./db.js";
@@ -77,7 +77,9 @@ PREFECTURES.forEach(p => $("pref").add(new Option(p, p)));
 USES.forEach(u => $("use").add(new Option(u, u)));
 
 function clearForm() {
-  ["facility", "pref", "city",  "use", "useNote", "depth", "width", "height"].forEach(id => { $(id).value = ""; });
+  ["facility", "pref", "city", "use", "useNote", "depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => { $(id).value = ""; });
+  document.querySelector('input[name="roomShape"][value="rectangular"]').checked = true;
+  updateRoomShape();
   $("useNoteWrap").hidden = true; $("planArea").hidden = true;
   $("err").textContent = ""; $("nextInfo").disabled = true;
 }
@@ -86,19 +88,42 @@ function invalidate() {
   Object.assign(state, { ready: false, facilityId: null, results: {} });
 }
 const toHalf = s => s.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).replace(/．/g, ".");
-["depth", "width", "height"].forEach(id => {
+["depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => {
   const input = $(id);
   const norm = () => { input.value = toHalf(input.value).replace(/[^\d.]/g, ""); };
   input.addEventListener("compositionend", norm);
   input.addEventListener("blur", norm);
 });
 document.querySelectorAll("#info input, #info select").forEach(x => x.addEventListener("input", invalidate));
+function updateRoomShape() {
+  const isConcave = document.querySelector('input[name="roomShape"]:checked').value === "concave";
+  $("rectRoomFields").hidden = isConcave;
+  $("concaveRoomFields").hidden = !isConcave;
+}
+document.querySelectorAll('input[name="roomShape"]').forEach(input => input.addEventListener("change", updateRoomShape));
 $("use").addEventListener("change", () => { $("useNoteWrap").hidden = !NOTE_USES.includes($("use").value); });
 
 function drawPlan() {
   const facility = $("facility").value.trim(), pref = $("pref").value, city = $("city").value.trim();
   const use = $("use").value, useNote = $("useNote").value.trim();
-  const D = Number($("depth").value), W = Number($("width").value), H = Number($("height").value);
+  const roomShape = document.querySelector('input[name="roomShape"]:checked').value;
+  const H = Number($("height").value);
+  const dimensions = roomShape === "concave"
+    ? [Number($("depth1").value), Number($("width1").value), Number($("depth2").value), Number($("width2").value)]
+    : [Number($("depth").value), Number($("width").value)];
+  const [D1, W1, D2, W2] = dimensions;
+  const D = roomShape === "concave" ? Math.max(D1 || 0, D2 || 0) : dimensions[0];
+  const W = roomShape === "concave" ? W1 + W2 : dimensions[1];
+  const sections = roomShape === "concave"
+    ? [
+        { x: 0, y: D - D1, width: W1, depth: D1 },
+        { x: W1, y: D - D2, width: W2, depth: D2 }
+      ]
+    : [{ x: 0, y: 0, width: W, depth: D }];
+  const area = roomShape === "concave" ? W1 * D1 + W2 * D2 : W * D;
+  const perimeter = roomShape === "concave"
+    ? 2 * (W1 + D1 + W2 + D2) - 2 * Math.min(D1, D2)
+    : 2 * (W + D);
 
   let msg = "";
   if (!facility) msg = "施設名を入力してください。";
@@ -106,21 +131,28 @@ function drawPlan() {
   else if (!city) msg = "市町村を入力してください。";
   else if (!use) msg = "部屋の用途を選択してください。";
   else if (use === "その他" && !useNote) msg = "部屋の用途を自由記述欄に入力してください。";
-  else if (!(D > 0 && W > 0 && H > 0)) msg = "奥行・幅・高さを0より大きい数値で入力してください。";
-  else if (D > 50 || W > 50 || H > 20) msg = "寸法が大きすぎます。単位がメートルか確認してください。";
+  else if (dimensions.some(value => !(value > 0)) || !(H > 0)) msg = roomShape === "concave"
+    ? "2部屋分の奥行・幅と高さを0より大きい数値で入力してください。"
+    : "奥行・幅・高さを0より大きい数値で入力してください。";
+  else if (roomShape === "concave" && D1 === D2) msg = "入力した奥行では凹凸型になりません。長方形型を選ぶか、寸法を確認してください。";
+  else if (D > 50 || W > 50 || dimensions.some(value => value > 50) || H > 20) msg = "寸法が大きすぎます。単位がメートルか確認してください。";
   $("err").textContent = msg;
   if (msg) { invalidate(); return; }
 
-  const V = volume(W, D, H);
+  const V = area * H;
   Object.assign(state, {
     ready: true, facility, pref, city, use, useNote,
+    roomShape, sections,
     depth: D, width: W, height: H, volume: V, dc: directDistance(V),
-    points: layoutPoints(W, D, pointCount(V)), activeIdx: 0, results: {}, facilityId: null
+    points: layoutPointsInSections(sections, pointCount(V)), activeIdx: 0, results: {}, facilityId: null
   });
-  $("plan").innerHTML = planSvg(W, D);
-  $("sArea").textContent = fmt(W * D) + " ㎡";
+  $("plan").innerHTML = planSvg(W, D, { sections });
+  $("sArea").textContent = fmt(area) + " ㎡";
   $("sVol").textContent = fmt(V) + " ㎥";
-  $("sPer").textContent = fmt(2 * (W + D)) + " m";
+  $("sPer").textContent = fmt(perimeter) + " m";
+  $("sDims").textContent = roomShape === "concave"
+    ? `部屋1: 奥行 ${fmt(D1)} m × 幅 ${fmt(W1)} m ／ 部屋2: 奥行 ${fmt(D2)} m × 幅 ${fmt(W2)} m（共通高さ ${fmt(H)} m）`
+    : `奥行 ${fmt(D)} m × 幅 ${fmt(W)} m × 高さ ${fmt(H)} m`;
   $("planArea").hidden = false;
   $("nextInfo").disabled = false;
   $("planArea").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -129,6 +161,8 @@ $("drawBtn").addEventListener("click", drawPlan);
 
 $("fillSample").addEventListener("click", () => {
   Object.entries(SAMPLE).forEach(([k, v]) => { $(k).value = v; });
+  document.querySelector('input[name="roomShape"][value="rectangular"]').checked = true;
+  updateRoomShape();
   $("useNoteWrap").hidden = !NOTE_USES.includes(SAMPLE.use);
   drawPlan();
 });
@@ -159,14 +193,17 @@ updateChecklist();
 /* ---------- P5 測定位置・ガイド ---------- */
 function renderPosition() {
   const doneIdx = Object.keys(state.results).map(Number);
-  $("planPos").innerHTML = planSvg(state.width, state.depth, { points: state.points, active: state.activeIdx, done: doneIdx });
+  $("planPos").innerHTML = planSvg(state.width, state.depth, { points: state.points, active: state.activeIdx, done: doneIdx, sections: state.sections });
   $("pVol").textContent = fmt(state.volume) + " ㎥";
   $("pDc").textContent = fmt(state.dc) + " m";
   $("pN").textContent = state.points.length + " 点";
   const p = state.points[state.activeIdx];
+  const positionText = p.roomIndex == null
+    ? `左の壁から ${fmt(p.x)} m、上の壁から ${fmt(p.y)} m`
+    : `部屋${p.roomIndex + 1}の左上端を基準に、左壁から ${fmt(p.localX)} m、上壁から ${fmt(p.localY)} m`;
   $("posNote").textContent =
     `測定点 ${state.activeIdx + 1} / ${state.points.length}(図の番号をタップすると切り替えられます。塗りつぶしは測定済み)。` +
-    `左の壁から ${fmt(p.x)} m、上の壁から ${fmt(p.y)} m の位置に立ってください。`;
+    `${positionText} の位置に立ってください。`;
 }
 $("planPos").addEventListener("click", e => {
   const g = e.target.closest("[data-point]");
@@ -420,7 +457,9 @@ $("otherBtn").addEventListener("click", () => {
 });
 
 function goOtherPlace() {
-  ["use", "useNote", "depth", "width", "height"].forEach(id => { $(id).value = ""; });
+  ["use", "useNote", "depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => { $(id).value = ""; });
+  document.querySelector('input[name="roomShape"][value="rectangular"]').checked = true;
+  updateRoomShape();
   $("useNoteWrap").hidden = true;
   $("planArea").hidden = true;
   $("err").textContent = "";

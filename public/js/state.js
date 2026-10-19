@@ -3,6 +3,7 @@ export const state = {};
 export function resetFlow() {
   Object.assign(state, {
     ready: false, use: "", useNote: "",
+    roomShape: "rectangular", sections: [],
     depth: 0, width: 0, height: 0, volume: 0, dc: 0,
     points: [], activeIdx: 0,
     results: {},
