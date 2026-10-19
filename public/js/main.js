@@ -396,11 +396,6 @@ function renderResult() {
   }
   $("r2Value").textContent = r.r2 == null ? "--" : `${fmt(r.r2 * 100)}%`;
   $("validValue").textContent = r.r2 == null ? "未評価" : (r.r2 > 0.8 ? "有効" : "再測定推奨");
-  if (!isConcave) {
-    $("irInfo").textContent = r.sampleRate
-      ? `マイク録音から解析（${r.sampleRate.toLocaleString("ja-JP")} Hz）。入力レベルはdBFS表示で、校正済みの音圧レベル(dB SPL)ではありません。`
-      : "マイク録音から解析したインパルス応答です。";
-  }
   $("demoNote").hidden = !DEMO;
   $("uploadErr").textContent = "";
   if (!isConcave) {
