@@ -3,7 +3,7 @@ import { state, resetFlow, resetAll } from "./state.js";
 import { averageMeasurements, directDistance, roomCenter } from "./acoustics.js";
 import { planSvg } from "./plan.js";
 import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
-import { uploadConcaveMeasurements, uploadMeasurement, loadHistory } from "./db.js";
+import { deleteMeasurement, uploadConcaveMeasurements, uploadMeasurement, loadHistory } from "./db.js";
 
 const $ = id => document.getElementById(id);
 const fmt = n => String(Math.round((n + Number.EPSILON) * 100) / 100);
@@ -698,31 +698,72 @@ function historyCard(f) {
   c.append(
     el("h3", f.name),
     el("p", `県: ${f.prefecture}`, "meta"),
-    el("p", `市区町村: ${f.city}`, "meta")
+    el("p", `市区町村: ${f.city}`, "meta"),
+    el("p", `施設の用途: ${f.room.use}${f.room.useNote ? `（${f.room.useNote}）` : ""}`, "meta")
   );
   f.measurements.forEach(m => {
-    const result = el("section", null, "card");
-    result.appendChild(el("h3", `測定名: ${m.name || "未設定"}`));
-    const average = m.resultSets && m.resultSets.find(set => set.key === "average");
-    result.append(
-      el("p", `RT60: ${fmt(average ? average.rt60 : m.rt60)} 秒`, "meta"),
-      el("p", `EDT: ${fmt(average ? average.edt : m.edt)} 秒`, "meta")
-    );
-    const ir = average ? average.ir : m.ir;
-    if (Array.isArray(ir) && ir.length) {
-      const title = el("div", average ? "インパルス応答 (2部屋平均)" : "インパルス応答 (IR)", "card-title");
-      const canvas = document.createElement("canvas");
-      canvas.className = "result-chart";
-      canvas.dataset.historyIr = JSON.stringify(ir);
-      canvas.setAttribute("role", "img");
-      canvas.setAttribute("aria-label", average ? "2部屋平均のインパルス応答" : "測定結果のインパルス応答");
-      result.append(title, canvas);
-    } else {
-      result.appendChild(el("p", "この測定にはグラフデータが保存されていません。", "meta"));
-    }
-    c.appendChild(result);
+    const measurement = el("section", null, "history-measurement");
+    const header = el("div", null, "history-measurement-header");
+    header.appendChild(el("h3", `測定名: ${m.name || "未設定"}`));
+    const deleteButton = el("button", "削除", "history-delete");
+    deleteButton.type = "button";
+    deleteButton.addEventListener("click", () => confirmDeleteMeasurement(m, deleteButton));
+    header.appendChild(deleteButton);
+    measurement.appendChild(header);
+    measurement.appendChild(el("p", m.measuredAt.toDate().toLocaleString("ja-JP"), "meta"));
+    const resultSets = Array.isArray(m.resultSets) && m.resultSets.length
+      ? m.resultSets
+      : [{ label: "測定結果", rt60: m.rt60, edt: m.edt, r2: m.r2, valid: m.valid, ir: m.ir }];
+    resultSets.forEach(result => measurement.appendChild(historyResultCard(result)));
+    c.appendChild(measurement);
   });
   return c;
+}
+function historyResultCard(result) {
+  const card = el("article", null, "card");
+  card.appendChild(el("h3", result.label));
+  const summary = el("div", null, "summary two");
+  summary.append(metric("RT60", result.rt60), metric("EDT", result.edt));
+  const quality = el("div", null, "summary two");
+  const validity = el("div", "有効性");
+  validity.appendChild(el("b", result.r2 == null
+    ? "未評価"
+    : result.r2 > 0.8 ? "有効" : "再測定推奨"));
+  quality.append(qualityMetric("適合度 R²", result.r2), validity);
+  card.append(summary, quality);
+  if (Array.isArray(result.ir) && result.ir.length) {
+    const canvas = document.createElement("canvas");
+    canvas.className = "result-chart";
+    canvas.dataset.historyIr = JSON.stringify(result.ir);
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", `${result.label}のインパルス応答`);
+    card.appendChild(canvas);
+  } else {
+    card.appendChild(el("p", "この測定にはグラフデータが保存されていません。", "meta"));
+  }
+  return card;
+}
+function confirmDeleteMeasurement(measurement, button) {
+  openDialog(
+    `「${measurement.name || "未設定"}」の測定結果を完全に削除します。この操作は取り消せません。削除しますか?`,
+    () => removeHistoryMeasurement(measurement, button),
+    "削除"
+  );
+}
+async function removeHistoryMeasurement(measurement, button) {
+  button.disabled = true;
+  button.textContent = "削除中…";
+  try {
+    await deleteMeasurement(measurement.facilityId, measurement.measurementId);
+    await renderHistory();
+  } catch (error) {
+    console.error("測定結果の削除に失敗しました。", error);
+    button.disabled = false;
+    button.textContent = "削除";
+    $("historyStatus").textContent = error && error.code === "permission-denied"
+      ? "削除権限がありません。Firestoreの削除ルールをデプロイしてから再試行してください。"
+      : saveErrorMessage(error);
+  }
 }
 $("historyReload").addEventListener("click", renderHistory);
 

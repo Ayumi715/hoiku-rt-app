@@ -135,3 +135,17 @@ export async function loadHistory() {
     .map(d => ({ ...d.data(), measurements: (byFacility[d.id] || []).sort((a, b) => a.pointIndex - b.pointIndex) }))
     .sort((a, b) => ts(b) - ts(a));
 }
+
+export async function deleteMeasurement(facilityId, measurementId) {
+  await ensureUser();
+  const measurements = await db.collection("measurements")
+    .where("facilityId", "==", facilityId)
+    .get();
+  const remaining = measurements.docs.filter(doc => doc.id !== measurementId);
+  const batch = db.batch();
+  batch.delete(db.collection("measurements").doc(measurementId));
+  if (!remaining.length) {
+    batch.delete(db.collection("facilities").doc(facilityId));
+  }
+  await batch.commit();
+}
