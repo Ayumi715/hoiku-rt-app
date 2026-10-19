@@ -16,7 +16,7 @@ service cloud.firestore {
         && request.resource.data.volume is number
         && request.resource.data.volume > 0;
       allow update: if false;
-      allow delete: if signedIn();
+      allow delete: if isOwner();
     }
 
     match /measurements/{measurementId} {
@@ -29,7 +29,7 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/facilities/$(request.resource.data.facilityId))
         && getAfter(/databases/$(database)/documents/facilities/$(request.resource.data.facilityId)).data.ownerUid == request.auth.uid;
       allow update: if false;
-      allow delete: if signedIn();
+      allow delete: if isOwner();
     }
   }
 }

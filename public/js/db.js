@@ -136,17 +136,18 @@ export async function loadHistory() {
     .sort((a, b) => ts(b) - ts(a));
 }
 
-export async function deleteMeasurement(facilityId, measurementId) {
+export async function deleteFacilityHistory(facilityId) {
   const user = await ensureUser();
   const measurements = await db.collection("measurements")
-    .where("facilityId", "==", facilityId)
     .where("ownerUid", "==", user.uid)
     .get();
-  const remaining = measurements.docs.filter(doc => doc.id !== measurementId);
-  const batch = db.batch();
-  batch.delete(db.collection("measurements").doc(measurementId));
-  if (!remaining.length) {
-    batch.delete(db.collection("facilities").doc(facilityId));
+  const facilityMeasurements = measurements.docs.filter(doc => doc.data().facilityId === facilityId);
+  for (let start = 0; start < facilityMeasurements.length; start += 499) {
+    const batch = db.batch();
+    facilityMeasurements.slice(start, start + 499).forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
   }
+  const batch = db.batch();
+  batch.delete(db.collection("facilities").doc(facilityId));
   await batch.commit();
 }

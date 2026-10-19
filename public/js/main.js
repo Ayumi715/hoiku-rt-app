@@ -3,7 +3,7 @@ import { state, resetFlow, resetAll } from "./state.js";
 import { averageMeasurements, directDistance, roomCenter } from "./acoustics.js";
 import { planSvg } from "./plan.js";
 import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
-import { deleteMeasurement, uploadConcaveMeasurements, uploadMeasurement, loadHistory } from "./db.js";
+import { deleteFacilityHistory, uploadConcaveMeasurements, uploadMeasurement, loadHistory } from "./db.js";
 
 const $ = id => document.getElementById(id);
 const fmt = n => String(Math.round((n + Number.EPSILON) * 100) / 100);
@@ -694,9 +694,15 @@ async function renderHistory() {
   }
 }
 function historyCard(f) {
-  const c = el("article", null, "card");
+  const c = el("article", null, "card history-facility-card");
+  const header = el("div", null, "history-facility-header");
+  header.appendChild(el("h3", f.name));
+  const deleteButton = el("button", "削除", "history-delete");
+  deleteButton.type = "button";
+  deleteButton.addEventListener("click", () => confirmDeleteFacility(f, deleteButton));
+  header.appendChild(deleteButton);
   c.append(
-    el("h3", f.name),
+    header,
     el("p", `県: ${f.prefecture}`, "meta"),
     el("p", `市区町村: ${f.city}`, "meta"),
     el("p", `施設の用途: ${f.room.use}${f.room.useNote ? `（${f.room.useNote}）` : ""}`, "meta")
@@ -705,10 +711,6 @@ function historyCard(f) {
     const measurement = el("section", null, "history-measurement");
     const header = el("div", null, "history-measurement-header");
     header.appendChild(el("h3", `測定名: ${m.name || "未設定"}`));
-    const deleteButton = el("button", "削除", "history-delete");
-    deleteButton.type = "button";
-    deleteButton.addEventListener("click", () => confirmDeleteMeasurement(m, deleteButton));
-    header.appendChild(deleteButton);
     measurement.appendChild(header);
     measurement.appendChild(el("p", m.measuredAt.toDate().toLocaleString("ja-JP"), "meta"));
     const resultSets = Array.isArray(m.resultSets) && m.resultSets.length
@@ -743,18 +745,18 @@ function historyResultCard(result) {
   }
   return card;
 }
-function confirmDeleteMeasurement(measurement, button) {
+function confirmDeleteFacility(facility, button) {
   openDialog(
-    `「${measurement.name || "未設定"}」の測定結果を完全に削除します。この操作は取り消せません。削除しますか?`,
-    () => removeHistoryMeasurement(measurement, button),
+    `「${facility.name}」と登録されているすべての測定結果をFirebaseから削除します。この操作は取り消せません。削除しますか?`,
+    () => removeHistoryFacility(facility, button),
     "削除"
   );
 }
-async function removeHistoryMeasurement(measurement, button) {
+async function removeHistoryFacility(facility, button) {
   button.disabled = true;
   button.textContent = "削除中…";
   try {
-    await deleteMeasurement(measurement.facilityId, measurement.measurementId);
+    await deleteFacilityHistory(facility.facilityId);
     await renderHistory();
   } catch (error) {
     console.error("測定結果の削除に失敗しました。", error);

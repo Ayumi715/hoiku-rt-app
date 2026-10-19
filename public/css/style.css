@@ -75,8 +75,11 @@ h3{font-size:17px;margin:8px 0 0}
 .card h3,.card p{margin:0}
 .card .row{display:flex;justify-content:space-between;gap:12px}
 .card .row strong{color:var(--accent)}
-.history-measurement{position:relative;display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;border:1.5px solid var(--line);border-radius:14px;background:var(--panel)}
-.history-measurement-header{display:flex;align-items:center;gap:12px;padding-right:52px}
+.history-facility-card{position:relative}
+.history-facility-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-right:64px}
+.history-facility-header h3{min-width:0}
+.history-measurement{display:flex;flex-direction:column;gap:8px;width:100%;padding:0 0 12px;border:0;border-radius:0;background:transparent}
+.history-measurement-header{display:flex;align-items:center;gap:12px}
 .history-measurement-header h3{min-width:0}
 .history-delete{position:absolute;top:10px;right:12px;padding:4px 8px;border:0;background:transparent;color:#c62828;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
 .history-delete:hover{text-decoration:underline}
