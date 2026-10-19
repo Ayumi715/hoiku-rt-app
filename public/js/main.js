@@ -256,7 +256,7 @@ $("previewTspBtn").addEventListener("click", async () => {
   const button = $("previewTspBtn");
   const status = $("previewTspStatus");
   button.disabled = true;
-  status.textContent = "TSPを1回再生しています。";
+  status.textContent = "TSPを3回再生しています（約11秒）。";
   try {
     await playTspPreview();
     status.textContent = "試聴が完了しました。";

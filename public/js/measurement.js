@@ -126,6 +126,24 @@ function makePinkTsp(sampleRate, settings) {
   return Float32Array.from(real, value => value * normalization);
 }
 
+function buildRepeatedSignal(pulse, sampleRate, settings) {
+  const maxTotalLength = Math.floor(sampleRate * (settings.durationSeconds + RESPONSE_SECONDS) * settings.averages);
+  const slotLength = Math.floor(maxTotalLength / settings.averages);
+  const responseLength = slotLength - pulse.length;
+  if (responseLength <= 0) {
+    throw new Error("この端末のサンプリングレートでは測定時間内にTSPを再生できません。");
+  }
+  const totalLength = slotLength * settings.averages;
+  if (totalLength > maxTotalLength) {
+    throw new Error("測定時間に対して信号長が長すぎます。");
+  }
+  const output = new Float32Array(totalLength);
+  for (let repetition = 0; repetition < settings.averages; repetition++) {
+    output.set(pulse, repetition * slotLength);
+  }
+  return { output, slotLength, responseLength };
+}
+
 function collectRecording(session, durationSeconds, ctrl, playbackGain) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -456,9 +474,10 @@ export async function playTspPreview() {
   try {
     await context.resume();
     if (context.state !== "running") throw new Error("音声を再生できません。ブラウザーの音声設定を確認してください。");
-    const signal = makePinkTsp(context.sampleRate, MEASUREMENT_SETTINGS);
-    const buffer = context.createBuffer(1, signal.length, context.sampleRate);
-    buffer.copyToChannel(signal, 0);
+    const pulse = makePinkTsp(context.sampleRate, MEASUREMENT_SETTINGS);
+    const { output } = buildRepeatedSignal(pulse, context.sampleRate, MEASUREMENT_SETTINGS);
+    const buffer = context.createBuffer(1, output.length, context.sampleRate);
+    buffer.copyToChannel(output, 0);
     const source = context.createBufferSource();
     source.buffer = buffer;
     const gain = context.createGain();
@@ -487,20 +506,7 @@ export async function playTspPreview() {
 export async function runMeasurement(session, ctrl, settings = MEASUREMENT_SETTINGS) {
   const sampleRate = session.sampleRate;
   const pulse = makePinkTsp(sampleRate, settings);
-  const maxTotalLength = Math.floor(sampleRate * (settings.durationSeconds + RESPONSE_SECONDS) * settings.averages);
-  const slotLength = Math.floor(maxTotalLength / settings.averages);
-  const responseLength = slotLength - pulse.length;
-  if (responseLength <= 0) {
-    throw new Error("この端末のサンプリングレートでは測定時間内にTSPを再生できません。");
-  }
-  const totalLength = slotLength * settings.averages;
-  if (totalLength > maxTotalLength) {
-    throw new Error("測定時間に対して信号長が長すぎます。");
-  }
-  const output = new Float32Array(totalLength);
-  for (let average = 0; average < settings.averages; average++) {
-    output.set(pulse, average * slotLength);
-  }
+  const { output, slotLength, responseLength } = buildRepeatedSignal(pulse, sampleRate, settings);
   session.setMeasurementBuffer(output);
 
   const captureDuration = output.length / sampleRate;
