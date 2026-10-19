@@ -18,6 +18,7 @@ let audioSession = null, microphonePromise = null, microphonePromiseGeneration =
 function show(id) {
   if (!SCREENS.includes(id) || (NEEDS_DATA.includes(id) && !state.ready)) id = "home";
   if (id === "result" && !state.results[state.activeIdx]) id = state.ready ? "position" : "home";
+  if (id === "checklist") resetChecklist();
   if (location.hash.slice(1) !== id) history.replaceState(null, "", "#" + id);
   if (id === "help" && current !== "help") helpReturn = current;
   if (current === "measuring" && id !== "measuring") {
@@ -33,6 +34,9 @@ function show(id) {
   if (id === "history") renderHistory();
 }
 window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+window.addEventListener("pageshow", () => {
+  if (current === "checklist") resetChecklist();
+});
 
 document.addEventListener("click", e => {
   const go = e.target.closest("[data-go]");
@@ -68,7 +72,7 @@ function requestHome() {
   else goHome();
 }
 function goHome() {
-  resetAll(); clearForm(); updateChecklist();
+  resetAll(); clearForm(); resetChecklist();
   location.hash = "home"; show("home");
 }
 
@@ -176,6 +180,10 @@ function updateChecklist() {
   boxes.forEach(b => b.closest(".check-item").classList.toggle("checked", b.checked));
   $("checkCount").textContent = `${n} / ${boxes.length} 確認済み`;
   $("nextCheck").disabled = n !== boxes.length;
+}
+function resetChecklist() {
+  document.querySelectorAll("#checkList input").forEach(box => { box.checked = false; });
+  updateChecklist();
 }
 $("checkList").addEventListener("change", updateChecklist);
 $("checkAll").addEventListener("click", () => {
@@ -449,8 +457,7 @@ function goOtherPlace() {
   $("planArea").hidden = true;
   $("err").textContent = "";
   $("nextInfo").disabled = true;
-  document.querySelectorAll("#checkList input").forEach(b => { b.checked = false; });
-  updateChecklist();
+  resetChecklist();
   resetFlow();
   location.hash = "info";
 }
