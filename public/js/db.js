@@ -137,9 +137,10 @@ export async function loadHistory() {
 }
 
 export async function deleteMeasurement(facilityId, measurementId) {
-  await ensureUser();
+  const user = await ensureUser();
   const measurements = await db.collection("measurements")
     .where("facilityId", "==", facilityId)
+    .where("ownerUid", "==", user.uid)
     .get();
   const remaining = measurements.docs.filter(doc => doc.id !== measurementId);
   const batch = db.batch();
