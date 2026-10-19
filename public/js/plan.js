@@ -2,7 +2,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 const fmt = n => String(Math.round(n * 100) / 100);
 
 // W:幅(横) D:奥行(縦)  1mごとに升目を描く
-export function planSvg(W, D, { points = [], active = -1, done = [], sections = [] } = {}) {
+export function planSvg(W, D, { points = [], active = -1, done = [], sections = [], selectable = false } = {}) {
   const VW = 320, VH = 270, m = 32;
   const s = Math.min((VW - m * 2) / W, (VH - m * 2) / D);
   const rw = W * s, rd = D * s;
@@ -43,7 +43,7 @@ export function planSvg(W, D, { points = [], active = -1, done = [], sections = 
   points.forEach((p, i) => {
     const cx = x0 + p.x * s, cy = y0 + p.y * s;
     const isDone = done.includes(i);
-    g += `<g data-point="${i}" style="cursor:pointer">`;
+    g += `<g data-point="${i}" style="cursor:${selectable ? "pointer" : "default"}">`;
     if (i === active) g += `<circle class="pulse" cx="${cx}" cy="${cy}" r="14" style="fill:var(--accent)" opacity=".4"/>`;
     g += `<circle cx="${cx}" cy="${cy}" r="12" style="fill:${isDone ? "var(--accent)" : "var(--panel)"};stroke:var(--accent)" stroke-width="2.5"/>`;
     g += `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="13" font-weight="700" style="fill:${isDone ? "var(--accent-ink)" : "var(--ink)"}">${i + 1}</text></g>`;

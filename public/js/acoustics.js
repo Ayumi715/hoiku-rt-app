@@ -58,3 +58,28 @@ export function roomCenter(sections) {
     };
   }, { x: 0, y: 0 });
 }
+
+export function averageMeasurements(trials) {
+  const average = key => trials.reduce((total, trial) => total + trial[key], 0) / trials.length;
+  const averageArray = key => trials[0][key].map((_, i) =>
+    trials.reduce((total, trial) => total + trial[key][i], 0) / trials.length
+  );
+  const rt60 = average("rt60");
+  const r2 = average("r2");
+  return {
+    ...trials[trials.length - 1],
+    rt60,
+    edt: average("edt"),
+    r2,
+    valid: r2 > 0.8,
+    ir: averageArray("ir"),
+    edc: averageArray("edc"),
+    bands: trials[0].bands.map((band, i) => ({
+      hz: band.hz,
+      rt60: trials.reduce((total, trial) => total + trial.bands[i].rt60, 0) / trials.length,
+      edt: trials.reduce((total, trial) => total + trial.bands[i].edt, 0) / trials.length
+    })),
+    trials,
+    uploaded: false
+  };
+}

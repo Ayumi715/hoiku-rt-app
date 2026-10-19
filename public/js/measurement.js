@@ -5,11 +5,11 @@ export const MEASUREMENT_SETTINGS = Object.freeze({
   durationSeconds: 2.73,
   startFrequencyHz: 40,
   endFrequencyHz: 16000,
-  averages: 3,
+  averages: 1,
   playbackGain: 0.5
 });
 
-const MEASUREMENT_SECONDS = 10.9;
+const RESPONSE_SECONDS = 0.9;
 const EDGE_OCTAVES = 1;
 const SWEEP_START_RATIO = 0.02;
 const SWEEP_END_RATIO = 0.92;
@@ -369,7 +369,7 @@ function analyzeImpulseResponse(ir, sampleRate) {
     rt60: primary.seconds,
     edt: edtFit.seconds || primary.seconds,
     r2: primary.r2,
-    valid: primary.r2 >= 0.8 && primary.seconds > 0.05 && primary.seconds < 10,
+    valid: primary.r2 > 0.8,
     bands,
     ir: downsample(normalizedIr, 800),
     edc: downsample(edc, 800)
@@ -487,7 +487,7 @@ export async function playTspPreview() {
 export async function runMeasurement(session, ctrl, settings = MEASUREMENT_SETTINGS) {
   const sampleRate = session.sampleRate;
   const pulse = makePinkTsp(sampleRate, settings);
-  const maxTotalLength = Math.floor(sampleRate * MEASUREMENT_SECONDS);
+  const maxTotalLength = Math.floor(sampleRate * (settings.durationSeconds + RESPONSE_SECONDS) * settings.averages);
   const slotLength = Math.floor(maxTotalLength / settings.averages);
   const responseLength = slotLength - pulse.length;
   if (responseLength <= 0) {

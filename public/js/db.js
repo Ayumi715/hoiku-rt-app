@@ -1,4 +1,5 @@
 import { db, auth, FieldValue, Timestamp } from "./firebase-init.js";
+import { averageMeasurements } from "./acoustics.js";
 
 let signInPromise = null;
 export function ensureUser() {
@@ -20,29 +21,7 @@ export async function uploadMeasurement(state, idx, name) {
   const user = await ensureUser();
   const r = state.results[idx];
   const batch = db.batch();
-
-  let facilityId = state.facilityId;
-  if (!facilityId) {
-    const fRef = db.collection("facilities").doc();
-    facilityId = fRef.id;
-    batch.set(fRef, {
-      facilityId,
-      name: state.facility,
-      prefecture: state.pref,
-      city: state.city,
-      address: `${state.pref}${state.city}`,
-      volume: state.volume,
-      directDistance: state.dc,
-      room: {
-        use: state.use, useNote: state.useNote,
-        shape: state.roomShape,
-        depth: state.depth, width: state.width, height: state.height,
-        sections: state.sections.map(({ x, y, width, depth }) => ({ x, y, width, depth }))
-      },
-      ownerUid: user.uid,
-      createdAt: FieldValue.serverTimestamp()
-    });
-  }
+  const facilityId = addFacilityToBatch(batch, state, user.uid);
 
   const mRef = db.collection("measurements").doc();
   batch.set(mRef, {
@@ -54,13 +33,90 @@ export async function uploadMeasurement(state, idx, name) {
     position: state.points[idx],
     rt60: r.rt60,
     edt: r.edt,
+    r2: r.r2,
+    valid: r.valid,
     bands: r.bands,
+    trials: r.trials ? r.trials.map(({ rt60, edt }) => ({ rt60, edt })) : [],
     ownerUid: user.uid,
     createdAt: FieldValue.serverTimestamp()
   });
 
   await batch.commit();
   state.facilityId = facilityId;
+}
+
+export async function uploadConcaveMeasurements(state, name) {
+  const user = await ensureUser();
+  const roomResults = [state.results[0], state.results[1]];
+  const average = averageMeasurements(roomResults);
+  const resultSets = [
+    { key: "average", label: "2部屋平均", result: average },
+    { key: "room1", label: "部屋1", result: roomResults[0] },
+    { key: "room2", label: "部屋2", result: roomResults[1] }
+  ].map(({ key, label, result }) => ({
+    key,
+    label,
+    ...measurementData(result),
+    measuredAt: Timestamp.fromDate(result.measuredAt)
+  }));
+  const batch = db.batch();
+  const facilityId = addFacilityToBatch(batch, state, user.uid);
+  const mRef = db.collection("measurements").doc();
+  batch.set(mRef, {
+    measurementId: mRef.id,
+    name,
+    facilityId,
+    measuredAt: Timestamp.fromDate(new Date(Math.max(...roomResults.map(result => result.measuredAt.getTime())))),
+    pointIndex: 1,
+    position: state.points,
+    isConcaveBundle: true,
+    rt60: average.rt60,
+    edt: average.edt,
+    r2: average.r2,
+    valid: average.valid,
+    bands: average.bands,
+    resultSets,
+    ownerUid: user.uid,
+    createdAt: FieldValue.serverTimestamp()
+  });
+
+  await batch.commit();
+  state.facilityId = facilityId;
+}
+
+function measurementData(result) {
+  return {
+    rt60: result.rt60,
+    edt: result.edt,
+    r2: result.r2,
+    valid: result.valid,
+    bands: result.bands,
+    sampleRate: result.sampleRate,
+    ir: Array.from(result.ir)
+  };
+}
+
+function addFacilityToBatch(batch, state, uid) {
+  if (state.facilityId) return state.facilityId;
+  const fRef = db.collection("facilities").doc();
+  batch.set(fRef, {
+    facilityId: fRef.id,
+    name: state.facility,
+    prefecture: state.pref,
+    city: state.city,
+    address: `${state.pref}${state.city}`,
+    volume: state.volume,
+    directDistance: state.dc,
+    room: {
+      use: state.use, useNote: state.useNote,
+      shape: state.roomShape,
+      depth: state.depth, width: state.width, height: state.height,
+      sections: state.sections.map(({ x, y, width, depth }) => ({ x, y, width, depth }))
+    },
+    ownerUid: uid,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return fRef.id;
 }
 
 // 同じ端末(匿名ユーザー)の保存結果を施設ごとにまとめて取得

@@ -6,6 +6,7 @@ export function resetFlow() {
     roomShape: "rectangular", sections: [],
     depth: 0, width: 0, height: 0, volume: 0, dc: 0,
     points: [], activeIdx: 0,
+    trials: {},
     results: {},
     facilityId: null
   });

@@ -1,12 +1,12 @@
 import { PREFECTURES, USES, NOTE_USES, CHECKLIST, SAMPLE } from "./config.js";
 import { state, resetFlow, resetAll } from "./state.js";
-import { directDistance, roomCenter } from "./acoustics.js";
+import { averageMeasurements, directDistance, roomCenter } from "./acoustics.js";
 import { planSvg } from "./plan.js";
 import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
-import { uploadMeasurement, loadHistory } from "./db.js";
+import { uploadConcaveMeasurements, uploadMeasurement, loadHistory } from "./db.js";
 
 const $ = id => document.getElementById(id);
-const fmt = n => String(Math.round(n * 100) / 100);
+const fmt = n => String(Math.round((n + Number.EPSILON) * 100) / 100);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
 
 /* ---------- 画面遷移 ---------- */
@@ -14,6 +14,8 @@ const SCREENS = ["home", "history", "overview", "info", "checklist", "position",
 const NEEDS_DATA = ["checklist", "position", "measuring", "result"];
 let current = "home", helpReturn = "home", job = null;
 let audioSession = null, microphonePromise = null, microphonePromiseGeneration = -1, microphoneGeneration = 0;
+let lastSaveNameIndex = -1;
+let redoMode = false, redoRoomSelected = false;
 
 function show(id) {
   if (!SCREENS.includes(id) || (NEEDS_DATA.includes(id) && !state.ready)) id = "home";
@@ -66,12 +68,15 @@ $("dlgOk").addEventListener("click", () => { $("dialog").hidden = true; dlgActio
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("dialog").hidden) closeDialog(); });
 
 function requestHome() {
-  const unsent = Object.values(state.results).some(r => !r.uploaded);
+  const unsent = Object.values(state.results).some(r => !r.uploaded) ||
+    Object.entries(state.trials).some(([idx, trials]) => trials.length > 0 && !state.results[idx]);
   if (current === "measuring") openDialog("測定中です。測定を中止してホームに戻りますか?");
   else if (unsent) openDialog("まだアップロードされていない結果がありますがホームに戻りますか?");
   else goHome();
 }
 function goHome() {
+  redoMode = false;
+  redoRoomSelected = false;
   resetAll(); clearForm(); resetChecklist();
   location.hash = "home"; show("home");
 }
@@ -81,6 +86,7 @@ PREFECTURES.forEach(p => $("pref").add(new Option(p, p)));
 USES.forEach(u => $("use").add(new Option(u, u)));
 
 function clearForm() {
+  lastSaveNameIndex = -1;
   ["facility", "pref", "city", "use", "useNote", "depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => { $(id).value = ""; });
   document.querySelector('input[name="roomShape"][value="rectangular"]').checked = true;
   updateRoomShape();
@@ -88,8 +94,10 @@ function clearForm() {
   $("err").textContent = ""; $("nextInfo").disabled = true;
 }
 function invalidate() {
+  redoMode = false;
+  redoRoomSelected = false;
   $("nextInfo").disabled = true;
-  Object.assign(state, { ready: false, facilityId: null, results: {} });
+  Object.assign(state, { ready: false, facilityId: null, trials: {}, results: {} });
 }
 const toHalf = s => s.replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).replace(/．/g, ".");
 ["depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => {
@@ -108,6 +116,8 @@ document.querySelectorAll('input[name="roomShape"]').forEach(input => input.addE
 $("use").addEventListener("change", () => { $("useNoteWrap").hidden = !NOTE_USES.includes($("use").value); });
 
 function drawPlan() {
+  redoMode = false;
+  redoRoomSelected = false;
   const facility = $("facility").value.trim(), pref = $("pref").value, city = $("city").value.trim();
   const use = $("use").value, useNote = $("useNote").value.trim();
   const roomShape = document.querySelector('input[name="roomShape"]:checked').value;
@@ -152,7 +162,7 @@ function drawPlan() {
     ready: true, facility, pref, city, use, useNote,
     roomShape, sections,
     depth: D, width: W, height: H, volume: V, dc: directDistance(V),
-    points, activeIdx: 0, results: {}, facilityId: null
+    points, activeIdx: 0, trials: {}, results: {}, facilityId: null
   });
   $("plan").innerHTML = planSvg(W, D, { sections });
   $("sDims").textContent = roomShape === "concave"
@@ -202,15 +212,41 @@ updateChecklist();
 /* ---------- P5 測定位置・ガイド ---------- */
 function renderPosition() {
   const doneIdx = Object.keys(state.results).map(Number);
-  $("planPos").innerHTML = planSvg(state.width, state.depth, { points: state.points, active: state.activeIdx, done: doneIdx, sections: state.sections });
-  $("posNote").textContent = state.roomShape === "concave"
-    ? "部屋1と部屋2、それぞれの中央に立ってください。図の番号をタップすると測定する部屋を切り替えられます。"
-    : "部屋の中央に立ってください。";
+  const isConcave = state.roomShape === "concave";
+  $("planPos").innerHTML = planSvg(state.width, state.depth, {
+    points: state.points,
+    active: isConcave && redoMode && !redoRoomSelected ? -1 : state.activeIdx,
+    done: doneIdx,
+    sections: state.sections,
+    selectable: isConcave && redoMode
+  });
+  if (state.roomShape === "concave") {
+    $("positionTitle").textContent = redoMode
+      ? "再測定する部屋を選択"
+      : `部屋${state.activeIdx + 1}の測定位置`;
+    $("posNote").textContent = redoMode
+      ? redoRoomSelected
+        ? `部屋${state.activeIdx + 1}を再測定します。`
+        : "間取り図の部屋番号をタップして、再測定する部屋を選んでください。"
+      : `部屋${state.activeIdx + 1}の中央で測定します。部屋1・2をそれぞれ1回測定します。`;
+    $("startMeasureBtn").disabled = redoMode && !redoRoomSelected;
+    $("startMeasureBtn").textContent = redoMode
+      ? `部屋${state.activeIdx + 1}を再測定`
+      : `部屋${state.activeIdx + 1}を測定`;
+  } else {
+    $("positionTitle").textContent = "測定位置";
+    $("posNote").textContent = "部屋の中央に立ってください。";
+    $("startMeasureBtn").disabled = false;
+    $("startMeasureBtn").textContent = "測定開始";
+  }
 }
 $("planPos").addEventListener("click", e => {
+  if (state.roomShape !== "concave" || !redoMode) return;
   const g = e.target.closest("[data-point]");
   if (!g) return;
-  state.activeIdx = Number(g.dataset.point);
+  const idx = Number(g.dataset.point);
+  state.activeIdx = idx;
+  redoRoomSelected = true;
   renderPosition();
 });
 
@@ -297,6 +333,7 @@ function setupMeasurement() {
 }
 
 async function beginMeasurement() {
+  if (job) return;
   $("measureErr").textContent = "";
   const c = job = { cancelled: false };
   const idx = state.activeIdx;
@@ -307,7 +344,26 @@ async function beginMeasurement() {
     await session.resume();
     const res = await runMeasurement(session, c, MEASUREMENT_SETTINGS);
     if (c.cancelled || current !== "measuring") return;
-    state.results[idx] = { ...res, measuredAt: new Date(), uploaded: false };
+    const measured = { ...res, measuredAt: new Date(), uploaded: false };
+    if (state.roomShape === "concave") {
+      state.results[idx] = measured;
+      delete state.trials[idx];
+      if (redoMode) {
+        redoMode = false;
+        redoRoomSelected = false;
+        state.activeIdx = 0;
+      } else {
+        const nextRoom = state.points.findIndex((_, roomIndex) => !state.results[roomIndex]);
+        if (nextRoom >= 0) {
+          state.activeIdx = nextRoom;
+          location.hash = "position";
+          return;
+        }
+        state.activeIdx = 0;
+      }
+    } else {
+      state.results[idx] = measured;
+    }
     location.hash = "result";
   } catch (err) {
     if (!c.cancelled) {
@@ -321,21 +377,137 @@ async function beginMeasurement() {
 /* ---------- P7 結果 ---------- */
 function renderResult() {
   const r = state.results[state.activeIdx];
+  const isConcave = state.roomShape === "concave";
   $("resMeta").textContent =
     `${state.facility}(${state.pref}${state.city})/ ${state.use}${state.useNote ? "(" + state.useNote + ")" : ""} / ` +
-    `測定点 ${state.activeIdx + 1} / ${r.measuredAt.toLocaleString("ja-JP")}`;
+    `${isConcave ? "部屋1・部屋2 各1回測定" : `測定点 ${state.activeIdx + 1}`} / ${r.measuredAt.toLocaleString("ja-JP")}`;
+  $("singleResultSummary").hidden = isConcave;
+  $("singleQualitySummary").hidden = isConcave;
+  $("concaveResults").hidden = !isConcave;
+  $("singleIrCard").hidden = isConcave;
+  $("singleSaveCard").hidden = isConcave;
   $("resRt").textContent = fmt(r.rt60) + " 秒";
   $("resEdt").textContent = fmt(r.edt) + " 秒";
+  if (isConcave) {
+    renderConcaveResults();
+  }
   $("r2Value").textContent = r.r2 == null ? "--" : `${fmt(r.r2 * 100)}%`;
-  $("validValue").textContent = r.valid == null ? "未評価" : (r.valid ? "有効" : "再測定推奨");
-  $("irInfo").textContent = r.sampleRate
-    ? `マイク録音から解析（${r.sampleRate.toLocaleString("ja-JP")} Hz）。入力レベルはdBFS表示で、校正済みの音圧レベル(dB SPL)ではありません。`
-    : "マイク録音から解析したインパルス応答です。";
+  $("validValue").textContent = r.r2 == null ? "未評価" : (r.r2 > 0.8 ? "有効" : "再測定推奨");
+  if (!isConcave) {
+    $("irInfo").textContent = r.sampleRate
+      ? `マイク録音から解析（${r.sampleRate.toLocaleString("ja-JP")} Hz）。入力レベルはdBFS表示で、校正済みの音圧レベル(dB SPL)ではありません。`
+      : "マイク録音から解析したインパルス応答です。";
+  }
   $("demoNote").hidden = !DEMO;
   $("uploadErr").textContent = "";
-  updateUploadUI();
-  drawImpulseResponse(r);
-  if (!$("saveName").value) $("saveName").value = `${state.use} 測定点${state.activeIdx + 1}`;
+  if (!isConcave) {
+    updateUploadUI();
+    drawImpulseResponse(r);
+    if (lastSaveNameIndex !== state.activeIdx || !$("saveName").value) {
+      $("saveName").value = `${state.use} 測定点${state.activeIdx + 1}`;
+      lastSaveNameIndex = state.activeIdx;
+    }
+  }
+}
+function renderConcaveResults() {
+  const root = $("concaveResults");
+  root.replaceChildren();
+  getConcaveReadings().forEach(({ label, result }, readingIndex) => {
+    const card = el("article", null, "card");
+    card.appendChild(el("h3", label));
+    const summary = el("div", null, "summary two");
+    summary.append(
+      metric("RT60", result.rt60),
+      metric("EDT", result.edt)
+    );
+    const quality = el("div", null, "summary two");
+    const validity = el("div", "有効性");
+    validity.appendChild(el("b", result.r2 > 0.8 ? "有効" : "再測定推奨"));
+    quality.append(
+      qualityMetric("適合度 R²", result.r2),
+      validity
+    );
+    const canvas = document.createElement("canvas");
+    canvas.className = "result-chart";
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", `${label}のインパルス応答`);
+    canvas.dataset.resultIndex = String(readingIndex);
+    card.append(summary, quality, canvas);
+    root.appendChild(card);
+    drawImpulseResponse(result, canvas);
+  });
+  root.appendChild(createConcaveSaveCard());
+}
+function getConcaveReadings() {
+  const room1 = state.results[0], room2 = state.results[1];
+  return [
+    { label: "2部屋平均", result: averageMeasurements([room1, room2]) },
+    { label: "部屋1", result: room1 },
+    { label: "部屋2", result: room2 }
+  ];
+}
+function metric(label, value) {
+  const item = el("div", label);
+  const number = el("b", `${fmt(value)} 秒`);
+  item.appendChild(number);
+  return item;
+}
+function qualityMetric(label, value) {
+  const item = el("div", label);
+  item.appendChild(el("b", value == null ? "--" : `${fmt(value * 100)}%`));
+  return item;
+}
+function createConcaveSaveCard() {
+  const card = el("div", null, "card");
+  card.appendChild(el("div", "3つの結果をまとめて保存", "card-title"));
+  const form = el("div", null, "save-form");
+  const label = el("label", null, "field");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "save-input";
+  input.maxLength = 50;
+  input.value = `${state.use} 部屋1・部屋2`;
+  const id = "concaveSaveName";
+  input.id = id;
+  const caption = el("span", "測定名");
+  label.htmlFor = id;
+  label.append(caption, input);
+  const button = el("button", "保存", "btn primary");
+  button.type = "button";
+  button.addEventListener("click", () => saveConcaveBundle(input, button, status, error));
+  form.append(label, button);
+  const status = el("div", null, "ok");
+  const error = el("div", null, "error");
+  card.append(form, status, error);
+  button.disabled = state.results[0].uploaded && state.results[1].uploaded;
+  if (button.disabled) {
+    button.textContent = "保存済み";
+    status.textContent = "✓ 3つの測定結果をまとめて保存しました。";
+  }
+  return card;
+}
+async function saveConcaveBundle(nameInput, button, status, error) {
+  const name = nameInput.value.trim();
+  if (!name) {
+    error.textContent = "測定名を入力してください。";
+    nameInput.focus();
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "保存中…";
+  error.textContent = "";
+  try {
+    await uploadConcaveMeasurements(state, name);
+    state.results[0].uploaded = true;
+    state.results[1].uploaded = true;
+    button.textContent = "保存済み";
+    status.textContent = "✓ 3つの測定結果をまとめて保存しました。";
+  } catch (err) {
+    console.error("測定結果の保存に失敗しました。", err);
+    error.textContent = saveErrorMessage(err);
+    button.disabled = false;
+    button.textContent = "保存";
+  }
 }
 function updateUploadUI() {
   const r = state.results[state.activeIdx];
@@ -344,25 +516,30 @@ function updateUploadUI() {
   $("uploadMsg").textContent = r.uploaded ? "✓ 測定結果を保存しました。" : "";
 }
 $("saveBtn").addEventListener("click", async () => {
-  const idx = state.activeIdx;
-  const name = $("saveName").value.trim();
+  await saveMeasurement(state.activeIdx, $("saveName"), $("saveBtn"), $("uploadMsg"), $("uploadErr"));
+});
+async function saveMeasurement(idx, nameInput, button, status, error) {
+  const name = nameInput.value.trim();
   if (!name) {
-    $("uploadErr").textContent = "測定名を入力してください。";
-    $("saveName").focus();
+    error.textContent = "測定名を入力してください。";
+    nameInput.focus();
     return;
   }
-  $("saveBtn").disabled = true;
-  $("saveBtn").textContent = "保存中…";
-  $("uploadErr").textContent = "";
+  button.disabled = true;
+  button.textContent = "保存中…";
+  error.textContent = "";
   try {
     await uploadMeasurement(state, idx, name);
     state.results[idx].uploaded = true;
+    button.textContent = "保存済み";
+    status.textContent = "✓ 測定結果を保存しました。";
   } catch (err) {
     console.error("測定結果の保存に失敗しました。", err);
-    $("uploadErr").textContent = saveErrorMessage(err);
+    error.textContent = saveErrorMessage(err);
+    button.disabled = false;
+    button.textContent = "保存";
   }
-  if (current === "result" && state.activeIdx === idx) updateUploadUI();
-});
+}
 
 function saveErrorMessage(error) {
   const code = error && error.code;
@@ -387,8 +564,7 @@ function saveErrorMessage(error) {
     : "保存に失敗しました。ブラウザーの開発者ツールでFirebaseのエラーを確認してください。";
 }
 
-function drawImpulseResponse(r) {
-  const canvas = $("irChart");
+function drawImpulseResponse(r, canvas = $("irChart")) {
   const rect = canvas.getBoundingClientRect();
   if (!rect.width) return;
   const ratio = window.devicePixelRatio || 1;
@@ -432,12 +608,26 @@ function drawImpulseResponse(r) {
   ctx.stroke();
 }
 window.addEventListener("resize", () => {
-  if (current === "result" && state.results[state.activeIdx]) drawImpulseResponse(state.results[state.activeIdx]);
+  if (current !== "result") return;
+  if (state.roomShape === "concave") {
+    document.querySelectorAll("#concaveResults canvas[data-result-index]").forEach(canvas => {
+      const reading = getConcaveReadings()[Number(canvas.dataset.resultIndex)];
+      drawImpulseResponse(reading.result, canvas);
+    });
+  } else if (state.results[state.activeIdx]) {
+    drawImpulseResponse(state.results[state.activeIdx]);
+  }
 });
 
 // 同じ場所でやり直す(同じ測定点)
 $("redoBtn").addEventListener("click", () => {
-  delete state.results[state.activeIdx];
+  if (state.roomShape === "concave") {
+    redoMode = true;
+    redoRoomSelected = false;
+  } else {
+    delete state.results[state.activeIdx];
+    delete state.trials[state.activeIdx];
+  }
   location.hash = "position";
 });
 // 別の場所で測定: 施設名・県・市町村は残し、人数・部屋の情報は空にして P3 へ
@@ -452,6 +642,7 @@ $("otherBtn").addEventListener("click", () => {
 });
 
 function goOtherPlace() {
+  lastSaveNameIndex = -1;
   ["use", "useNote", "depth", "width", "depth1", "width1", "depth2", "width2", "height"].forEach(id => { $(id).value = ""; });
   document.querySelector('input[name="roomShape"][value="rectangular"]').checked = true;
   updateRoomShape();
@@ -489,11 +680,23 @@ function historyCard(f) {
   );
   f.measurements.forEach(m => {
     const row = el("p", null, "row");
-    row.append(
-      el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`),
-      el("strong", `RT60 ${fmt(m.rt60)} 秒`)
-    );
-    c.append(row);
+    if (m.resultSets) {
+      const average = m.resultSets.find(result => result.key === "average");
+      const date = m.measuredAt.toDate().toLocaleDateString("ja-JP");
+      row.append(
+        el("span", `${m.name ? m.name + " / " : ""}部屋1・部屋2・平均(${date})`),
+        el("strong", `平均 RT60 ${fmt(average.rt60)} 秒`)
+      );
+      c.append(row, el("p", m.resultSets.map(result =>
+        `${result.label}: RT60 ${fmt(result.rt60)} 秒 / EDT ${fmt(result.edt)} 秒 / 適合度 R² ${fmt(result.r2 * 100)}%`
+      ).join("　"), "meta"));
+    } else {
+      row.append(
+        el("span", `${m.name ? m.name + " / " : ""}測定点${m.pointIndex}(${m.measuredAt.toDate().toLocaleDateString("ja-JP")})`),
+        el("strong", `RT60 ${fmt(m.rt60)} 秒`)
+      );
+      c.append(row);
+    }
   });
   return c;
 }
