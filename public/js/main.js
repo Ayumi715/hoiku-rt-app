@@ -1,6 +1,6 @@
 import { PREFECTURES, USES, NOTE_USES, CHECKLIST, SAMPLE } from "./config.js";
 import { state, resetFlow, resetAll } from "./state.js";
-import { directDistance, pointCount, layoutPointsInSections } from "./acoustics.js";
+import { directDistance, roomCenter } from "./acoustics.js";
 import { planSvg } from "./plan.js";
 import { openMicrophone, playTspPreview, runMeasurement, DEMO, MEASUREMENT_SETTINGS } from "./measurement.js";
 import { uploadMeasurement, loadHistory } from "./db.js";
@@ -121,9 +121,6 @@ function drawPlan() {
       ]
     : [{ x: 0, y: 0, width: W, depth: D }];
   const area = roomShape === "concave" ? W1 * D1 + W2 * D2 : W * D;
-  const perimeter = roomShape === "concave"
-    ? 2 * (W1 + D1 + W2 + D2) - 2 * Math.min(D1, D2)
-    : 2 * (W + D);
 
   let msg = "";
   if (!facility) msg = "施設名を入力してください。";
@@ -144,12 +141,9 @@ function drawPlan() {
     ready: true, facility, pref, city, use, useNote,
     roomShape, sections,
     depth: D, width: W, height: H, volume: V, dc: directDistance(V),
-    points: layoutPointsInSections(sections, pointCount(V)), activeIdx: 0, results: {}, facilityId: null
+    points: [roomCenter(sections)], activeIdx: 0, results: {}, facilityId: null
   });
   $("plan").innerHTML = planSvg(W, D, { sections });
-  $("sArea").textContent = fmt(area) + " ㎡";
-  $("sVol").textContent = fmt(V) + " ㎥";
-  $("sPer").textContent = fmt(perimeter) + " m";
   $("sDims").textContent = roomShape === "concave"
     ? `部屋1: 奥行 ${fmt(D1)} m × 幅 ${fmt(W1)} m ／ 部屋2: 奥行 ${fmt(D2)} m × 幅 ${fmt(W2)} m（共通高さ ${fmt(H)} m）`
     : `奥行 ${fmt(D)} m × 幅 ${fmt(W)} m × 高さ ${fmt(H)} m`;
@@ -194,16 +188,7 @@ updateChecklist();
 function renderPosition() {
   const doneIdx = Object.keys(state.results).map(Number);
   $("planPos").innerHTML = planSvg(state.width, state.depth, { points: state.points, active: state.activeIdx, done: doneIdx, sections: state.sections });
-  $("pVol").textContent = fmt(state.volume) + " ㎥";
-  $("pDc").textContent = fmt(state.dc) + " m";
-  $("pN").textContent = state.points.length + " 点";
-  const p = state.points[state.activeIdx];
-  const positionText = p.roomIndex == null
-    ? `左の壁から ${fmt(p.x)} m、上の壁から ${fmt(p.y)} m`
-    : `部屋${p.roomIndex + 1}の左上端を基準に、左壁から ${fmt(p.localX)} m、上壁から ${fmt(p.localY)} m`;
-  $("posNote").textContent =
-    `測定点 ${state.activeIdx + 1} / ${state.points.length}(図の番号をタップすると切り替えられます。塗りつぶしは測定済み)。` +
-    `${positionText} の位置に立ってください。`;
+  $("posNote").textContent = "部屋の中央に立ってください。";
 }
 $("planPos").addEventListener("click", e => {
   const g = e.target.closest("[data-point]");

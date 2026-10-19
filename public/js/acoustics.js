@@ -47,3 +47,14 @@ export function layoutPointsInSections(sections, n) {
       }))
   );
 }
+
+export function roomCenter(sections) {
+  const area = sections.reduce((total, section) => total + section.width * section.depth, 0);
+  return sections.reduce((center, section) => {
+    const sectionArea = section.width * section.depth;
+    return {
+      x: center.x + (section.x + section.width / 2) * sectionArea / area,
+      y: center.y + (section.y + section.depth / 2) * sectionArea / area
+    };
+  }, { x: 0, y: 0 });
+}
