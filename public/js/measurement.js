@@ -5,7 +5,7 @@ export const MEASUREMENT_SETTINGS = Object.freeze({
   durationSeconds: 2.73,
   startFrequencyHz: 40,
   endFrequencyHz: 16000,
-  averages: 1,
+  averages: 3,
   playbackGain: 0.5
 });
 
