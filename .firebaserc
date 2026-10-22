@@ -1,11 +1,18 @@
 {
-  "projects": { "default": "test-63a18" },
+  "projects": {
+    "default": "test-63a18"
+  },
   "targets": {
     "test-63a18": {
       "hosting": {
-        "teacher": ["test-63a18"],
-        "expert": ["test-63a18-expert"]
+        "teacher": [
+          "test-63a18"
+        ],
+        "expert": [
+          "test-63a18-expert"
+        ]
       }
     }
-  }
+  },
+  "etags": {}
 }
