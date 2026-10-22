@@ -1,15 +1,22 @@
 const COLORS = ["#0f766e", "#2563eb", "#c026d3", "#ea580c", "#65a30d", "#dc2626", "#0891b2", "#7c3aed", "#ca8a04"];
 
-// 測定データの ir: { sampleRate, samples[] } を重ねて描画する(測定点ごとに色分け)
-// 縦軸は保存した値の単位のまま。dB表示で保存する場合は軸ラベルを変更してください。
+// 旧形式(ir=配列 + sampleRate)と新形式(ir={sampleRate,samples})の両方に対応
+function irOf(m) {
+  if (m.ir && Array.isArray(m.ir.samples)) return m.ir;
+  if (Array.isArray(m.ir) && m.sampleRate > 0) return { sampleRate: m.sampleRate, samples: m.ir };
+  return null;
+}
+
 export function irSvg(measurements) {
-  const list = measurements.filter(m => m.ir && Array.isArray(m.ir.samples) && m.ir.samples.length > 1 && m.ir.sampleRate > 0);
+  const list = measurements
+    .map(m => ({ m, ir: irOf(m) }))
+    .filter(x => x.ir && x.ir.samples.length > 1 && x.ir.sampleRate > 0);
   if (!list.length) return `<div class="no-ir">IRデータがありません</div>`;
 
   const W = 420, H = 230, L = 46, R = 10, T = 12, B = 36;
-  const tMax = Math.max(...list.map(m => m.ir.samples.length / m.ir.sampleRate));
+  const tMax = Math.max(...list.map(x => x.ir.samples.length / x.ir.sampleRate));
   let lo = Infinity, hi = -Infinity;
-  list.forEach(m => m.ir.samples.forEach(v => { if (v < lo) lo = v; if (v > hi) hi = v; }));
+  list.forEach(x => x.ir.samples.forEach(v => { if (v < lo) lo = v; if (v > hi) hi = v; }));
   if (!(hi > lo)) hi = lo + 1;
 
   const x = t => L + (t / tMax) * (W - L - R);
@@ -27,10 +34,10 @@ export function irSvg(measurements) {
   g += `<text x="${(L + W - R) / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="currentColor">時間 (s)</text>`;
   g += `<text transform="translate(11 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="currentColor">振幅</text>`;
 
-  list.forEach((m, i) => {
-    const n = m.ir.samples.length, step = Math.max(1, Math.ceil(n / 800));
+  list.forEach(({ m, ir }, i) => {
+    const n = ir.samples.length, step = Math.max(1, Math.ceil(n / 800));
     const pts = [];
-    for (let k = 0; k < n; k += step) pts.push(`${x(k / m.ir.sampleRate).toFixed(1)},${y(m.ir.samples[k]).toFixed(1)}`);
+    for (let k = 0; k < n; k += step) pts.push(`${x(k / ir.sampleRate).toFixed(1)},${y(ir.samples[k]).toFixed(1)}`);
     g += `<polyline points="${pts.join(" ")}" fill="none" stroke="${COLORS[i % COLORS.length]}" stroke-width="1" stroke-linejoin="round"/>`;
     if (list.length > 1) {
       g += `<text x="${W - R - 4}" y="${T + 12 + i * 12}" text-anchor="end" font-size="10" fill="${COLORS[i % COLORS.length]}">点${esc(m.pointIndex ?? i + 1)}</text>`;

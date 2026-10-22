@@ -40,8 +40,10 @@ export function downloadGroups(groups) {
       a.id, a.name, a.prefecture, a.city, a.roomGroupId || "",
       g.uneven ? `部屋${(a.roomIndex || 0) + 1}` : "部屋", a.room.use, a.room.useNote,
       a.room.depth, a.room.width, a.room.height, a.volume, a.directDistance,
-      m.id, m.pointIndex, m.position && m.position.x, m.position && m.position.y, when(m), m.rt60, m.edt,
-      ...hzList.flatMap(hz => [bandOf(hz).rt60, bandOf(hz).edt])
+m.id, m.pointIndex,
+(Array.isArray(m.position) ? m.position[0] : m.position)?.x,
+(Array.isArray(m.position) ? m.position[0] : m.position)?.y,
+when(m), m.rt60, m.edt,      ...hzList.flatMap(hz => [bandOf(hz).rt60, bandOf(hz).edt])
     ]);
     if (m.ir && Array.isArray(m.ir.samples)) {
       m.ir.samples.forEach((v, i) => irRows.push([a.id, m.id, m.pointIndex, m.ir.sampleRate, i / m.ir.sampleRate, v]));

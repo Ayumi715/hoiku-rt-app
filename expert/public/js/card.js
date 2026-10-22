@@ -1,5 +1,5 @@
 import { irSvg } from "./chart.js";
-import { planSvg } from "./plan.js";
+import { planSvg, sectionsOf } from "./plan.js";
 import { downloadGroups } from "./download.js";
 
 const CHUNK = 10;
@@ -15,6 +15,7 @@ const el = (tag, cls, text) => {
 };
 const frag = html => { const t = document.createElement("template"); t.innerHTML = html; return t.content; };
 const f2 = n => (Number.isFinite(n) ? n.toFixed(2) : "-");
+const mean = a => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN);
 
 function valBox(label, v) {
   const d = el("div", "val", label);
@@ -41,24 +42,55 @@ function bandTable(ms) {
   return t;
 }
 
+// 詳細表示用の「部屋」一覧を作る
+function partsOf(g) {
+  const parts = [];
+  g.areas.forEach(a => {
+    const secs = sectionsOf(a);
+    const label = a.room.useNote || a.room.use || "用途なし";
+
+    // 凹凸: 測定ごとの rooms[] を部屋1・部屋2に振り分ける
+    if (secs.length > 1 && a.measurements.some(m => m.rooms && m.rooms.length)) {
+      secs.forEach((c, i) => {
+        const rs = a.measurements.map(m => (m.rooms || []).find(r => r.roomIndex === i)).filter(Boolean);
+        parts.push({
+          label, roomIndex: i,
+          room: { width: c.width, depth: c.depth },
+          ms: rs.map(r => ({
+            ...r,
+            position: r.position ? { x: r.position.x - c.x, y: r.position.y - c.y } : null  // 区画内の座標に直す
+          }))
+        });
+      });
+      return;
+    }
+    parts.push({ label, room: { ...a.room }, ms: a.measurements });
+  });
+  return parts;
+}
+
 // 凹凸の部屋: 部屋1・部屋2それぞれのデータ
 function buildDetail(g) {
   const box = el("div", "detail");
-  g.areas.forEach((a, i) => {
+  partsOf(g).forEach((p, i) => {
     const sec = el("section", "area");
-    sec.append(el("h4", null, `部屋${(a.roomIndex ?? i) + 1}（${a.room.useNote || a.room.use || "用途なし"}）`));
+    sec.append(el("h4", null, `部屋${i + 1}（${p.label}）`));
+    if (!p.ms.length) {
+      sec.append(el("p", "note", "この部屋の測定データがありません。"));
+      box.append(sec);
+      return;
+    }
     const vals = el("div", "vals");
-    vals.append(valBox("RT60", a.rt60), valBox("EDT", a.edt));
+    vals.append(valBox("RT60", mean(p.ms.map(m => m.rt60))), valBox("EDT", mean(p.ms.map(m => m.edt))));
     const body = el("div", "card-body");
-    const ir = el("div", "ir-box"); ir.append(frag(irSvg(a.measurements)));
+    const ir = el("div", "ir-box"); ir.append(frag(irSvg(p.ms)));
     const side = el("div", "side");
-    const plan = el("div", "plan"); plan.append(frag(planSvg([a])));
+    const plan = el("div", "plan"); plan.append(frag(planSvg([{ room: p.room, measurements: p.ms }])));
     side.append(vals, plan);
     body.append(ir, side);
-    sec.append(body, bandTable(a.measurements));
+    sec.append(body, bandTable(p.ms));
     box.append(sec);
   });
-  if (g.areas.length < 2) box.append(el("p", "note", "部屋2は未アップロードです。"));
   return box;
 }
 

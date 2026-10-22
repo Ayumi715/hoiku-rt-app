@@ -1,4 +1,4 @@
-import { PREFECTURES, USES } from "./config.js";
+import { PREFECTURES, USES, ROOM_VOLUME_RANGES } from "./config.js";
 import { loadGroups, sortGroups, filterGroups } from "./data.js";
 import { renderList, selected, setSelectionHandler } from "./card.js";
 import { downloadGroups } from "./download.js";
@@ -8,6 +8,7 @@ let allGroups = [], disposeList = null, disposeResult = null, lastResults = [], 
 
 PREFECTURES.forEach(p => $("searchPref").add(new Option(p, p)));
 USES.forEach(u => $("searchUse").add(new Option(u, u)));
+ROOM_VOLUME_RANGES.forEach(range => $("searchVolume").add(new Option(range.label, range.value)));
 
 /* ---------- 起動時にデータを読み込む ---------- */
 (async () => {
@@ -81,9 +82,10 @@ $("searchBtn").addEventListener("click", () => {
     pref: $("searchPref").value,
     city: $("searchCity").value.trim(),
     use: useOn ? $("searchUse").value : "",
-    useNote: $("searchUseOther").value.trim()
+    useNote: $("searchUseOther").value.trim(),
+    volume: $("searchVolume").value
   };
-  if (!q.name && !q.pref && !q.city && !q.use) {
+  if (!q.name && !q.pref && !q.city && !q.use && !q.volume) {
     $("searchErr").textContent = "検索条件を1つ以上指定してください。";
     return;
   }
