@@ -16,7 +16,22 @@ export function ensureUser() {
   return signInPromise;
 }
 
-// 1測定点ぶんを保存。施設は初回のみ作成し、同じ施設IDを使い回す
+// IRを間引いて保存用に整える(目安: 2000点前後、小数4桁)
+function packIr(ir, sampleRate, maxPoints = 2000) {
+  const src = Array.from(ir);
+  const step = Math.max(1, Math.ceil(src.length / maxPoints));
+  const samples = [];
+  for (let i = 0; i < src.length; i += step) {
+    // 間引き区間の中で絶対値が最大の点を残す(ピークを落とさないため)
+    let best = src[i];
+    for (let k = i; k < Math.min(i + step, src.length); k++) {
+      if (Math.abs(src[k]) > Math.abs(best)) best = src[k];
+    }
+    samples.push(Math.round(best * 1e4) / 1e4);
+  }
+  return { sampleRate: sampleRate / step, samples };   // 間引き後の実効サンプルレート
+}
+
 export async function uploadMeasurement(state, idx, name) {
   const user = await ensureUser();
   const r = state.results[idx];
@@ -36,8 +51,7 @@ export async function uploadMeasurement(state, idx, name) {
     r2: r.r2,
     valid: r.valid,
     bands: r.bands,
-    ir: Array.from(r.ir),
-    sampleRate: r.sampleRate,
+    ir: packIr(r.ir, r.sampleRate),     // ← { sampleRate, samples } の形で保存
     trials: r.trials ? r.trials.map(({ rt60, edt }) => ({ rt60, edt })) : [],
     ownerUid: user.uid,
     createdAt: FieldValue.serverTimestamp()
@@ -46,7 +60,6 @@ export async function uploadMeasurement(state, idx, name) {
   await batch.commit();
   state.facilityId = facilityId;
 }
-
 export async function uploadConcaveMeasurements(state, name) {
   const user = await ensureUser();
   const roomResults = [state.results[0], state.results[1]];
