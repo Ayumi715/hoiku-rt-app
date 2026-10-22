@@ -1,4 +1,3 @@
-@'
 {
   "firestore": {
     "rules": "firestore.rules",
@@ -51,4 +50,3 @@
     "ui": { "enabled": true }
   }
 }
-'@ | Set-Content -Encoding utf8 firebase.json
