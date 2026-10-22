@@ -1,13 +1,4 @@
 import { PREFECTURES, USES } from "./config.js";
-import { watchAuth, signIn, signOut } from "./auth.js";
-import { loadGroups, sortGroups, filterGroups } from "./data.js";
-import { renderList, selected, setSelectionHandler } from "./card.js";
-import { downloadGroups } from "./download.js";
-
-PREFECTURES.forEach(p => $("searchPref").add(new Option(p, p)));
-USES.forEach(u => $("searchUse").add(new Option(u, u)));
-
-import { PREFECTURES, USES } from "./config.js";
 import { loadGroups, sortGroups, filterGroups } from "./data.js";
 import { renderList, selected, setSelectionHandler } from "./card.js";
 import { downloadGroups } from "./download.js";
