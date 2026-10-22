@@ -12,10 +12,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 export const db = firebase.firestore();
-export const auth = firebase.auth();
 
 // エミュレータ利用時: http://localhost:5000/?emulator
 if (location.search.includes("emulator")) {
-  auth.useEmulator("http://localhost:9099");
   db.useEmulator("localhost", 8080);
 }
