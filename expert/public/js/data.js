@@ -85,27 +85,59 @@ export async function loadGroups() {
       rt60: mean(all.map(m => m.rt60)),
       edt: mean(all.map(m => m.edt)),
       latest,
-      dateText: latest ? new Date(latest).toLocaleDateString("ja-JP") : "不明"
+      dateText: latest ? new Date(latest).toLocaleString("ja-JP", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+      }) : "不明"
     };
   });
 }
 
 export function sortGroups(groups, order) {
-  const sign = order === "asc" ? 1 : -1;
-  return [...groups].sort((a, b) => sign * (a.latest - b.latest));
+  if (order === "asc" || order === "desc") {
+    const sign = order === "asc" ? 1 : -1;
+    return [...groups].sort((a, b) => sign * (a.latest - b.latest));
+  }
+
+  const [metric, direction] = order.split("-");
+  if (!["rt60", "edt"].includes(metric) || !["asc", "desc"].includes(direction)) {
+    return [...groups].sort((a, b) => b.latest - a.latest);
+  }
+
+  const sign = direction === "asc" ? 1 : -1;
+  return [...groups].sort((a, b) => {
+    const aValue = a[metric], bValue = b[metric];
+    const aValid = Number.isFinite(aValue), bValid = Number.isFinite(bValue);
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    if (aValid && aValue !== bValue) return sign * (aValue - bValue);
+    return b.latest - a.latest;
+  });
 }
 
 // 指定された条件をすべて満たす(AND)グループだけ返す
 export function filterGroups(groups, q) {
   const volumeRange = ROOM_VOLUME_RANGES.find(range => range.value === q.volume);
+  const hasCustomVolumeRange = q.volumeMin != null || q.volumeMax != null;
+  const volumeMin = hasCustomVolumeRange ? q.volumeMin : volumeRange?.min;
+  const volumeMax = hasCustomVolumeRange ? q.volumeMax : volumeRange?.max;
+  const hasVolumeFilter = volumeMin != null || volumeMax != null;
+  const matchesVolume = area => {
+    if (!hasVolumeFilter) return true;
+    if (area.volume == null || area.volume === "") return false;
+    const areaVolume = Number(area.volume);
+    if (!Number.isFinite(areaVolume)) return false;
+    return (volumeMin == null || areaVolume >= volumeMin) &&
+      (volumeMax == null || (hasCustomVolumeRange
+        ? areaVolume <= volumeMax
+        : areaVolume < volumeMax));
+  };
   return groups.filter(g =>
     (!q.name || g.name.includes(q.name)) &&
     (!q.pref || g.prefecture === q.pref) &&
     (!q.city || g.city.includes(q.city)) &&
-    ((!q.use && !volumeRange) || g.areas.some(a =>
+    ((!q.use && !hasVolumeFilter) || g.areas.some(a =>
       (!q.use || (a.room.use === q.use &&
         (q.use !== "その他" || !q.useNote || (a.room.useNote || "").includes(q.useNote)))) &&
-      (!volumeRange || (Number.isFinite(a.volume) &&
-        a.volume >= volumeRange.min && a.volume < volumeRange.max))))
+      matchesVolume(a)))
   );
 }

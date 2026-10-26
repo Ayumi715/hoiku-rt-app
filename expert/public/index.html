@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>残響時間データアプリ（仮）</title>
+<title>残響時間データアプリ</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 
 <div id="appView">
   <header id="header" class="header">
-    <h1 class="app-name">残響時間データアプリ（仮）</h1>
+    <h1 class="app-name">残響時間データアプリ</h1>
     <button id="magBtn" class="icon-btn" type="button" aria-label="検索ページを開く">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
     </button>
@@ -20,11 +20,18 @@
   <!-- P1 一覧 -->
   <section id="listView" class="page">
     <div class="toolbar">
-      <label for="sortSelect">並び順</label>
-      <select id="sortSelect">
-        <option value="desc">新しい順</option>
-        <option value="asc">古い順</option>
-      </select>
+      <span>並び順</span>
+      <label class="sort-field">
+        <select id="sortField" aria-label="並び替える項目">
+          <option value="date" selected>日時</option>
+          <option value="rt60">RT60</option>
+          <option value="edt">EDT</option>
+        </select>
+      </label>
+      <div class="sort-options" role="group" aria-label="並び順">
+        <button class="btn secondary small sort-direction" type="button" data-sort-direction="desc" aria-pressed="true">降順</button>
+        <button class="btn secondary small sort-direction" type="button" data-sort-direction="asc" aria-pressed="false">昇順</button>
+      </div>
       <span id="listStatus" class="meta" role="status" aria-live="polite"></span>
     </div>
     <div id="listContainer" class="list"></div>
@@ -41,16 +48,29 @@
       <input id="searchCity" type="text" placeholder="市区町村(任意)" autocomplete="off">
     </div>
 
-    <div class="field">
-      <button id="useToggle" class="btn secondary toggle" type="button" aria-pressed="false">用途で絞り込み</button>
-      <select id="searchUse" disabled><option value="">用途を選択</option></select>
-      <input id="searchUseOther" type="text" placeholder="用途(自由記述)" autocomplete="off" hidden>
-    </div>
-
     <label class="field">
+      <span>用途</span>
+      <select id="searchUse"><option value="">用途を選択</option></select>
+      <input id="searchUseOther" type="text" placeholder="用途(自由記述)" autocomplete="off" hidden>
+    </label>
+
+    <div class="field">
       <span>部屋の容積で絞り込み</span>
       <select id="searchVolume"><option value="">容積を指定しない</option></select>
-    </label>
+      <div class="volume-range">
+        <label class="volume-bound">
+          <span>下限 (m³)</span>
+          <input id="searchVolumeMin" type="number" min="0" step="any" placeholder="指定なし">
+        </label>
+        <span class="volume-separator" aria-hidden="true">～</span>
+        <label class="volume-bound">
+          <span>上限 (m³)</span>
+          <input id="searchVolumeMax" type="number" min="0" step="any" placeholder="指定なし">
+        </label>
+      </div>
+      <button id="resetVolumeRange" class="btn secondary small volume-reset" type="button">入力をリセット</button>
+      <span class="meta">下限・上限を入力すると、上の選択範囲より優先されます。</span>
+    </div>
 
     <div class="error" id="searchErr" role="alert"></div>
 

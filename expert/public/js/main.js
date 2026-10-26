@@ -5,6 +5,7 @@ import { downloadGroups } from "./download.js";
 
 const $ = id => document.getElementById(id);
 let allGroups = [], disposeList = null, disposeResult = null, lastResults = [], page = "list";
+let sortField = "date", sortDirection = "desc";
 
 PREFECTURES.forEach(p => $("searchPref").add(new Option(p, p)));
 USES.forEach(u => $("searchUse").add(new Option(u, u)));
@@ -45,11 +46,24 @@ window.addEventListener("scroll", () => {
 /* ---------- P1 一覧 ---------- */
 function renderListView() {
   if (disposeList) disposeList();
-  const sorted = sortGroups(allGroups, $("sortSelect").value);
+  const order = sortField === "date" ? sortDirection : `${sortField}-${sortDirection}`;
+  const sorted = sortGroups(allGroups, order);
   $("listStatus").textContent = sorted.length ? `${sorted.length}件` : "表示できるデータがありません。";
   disposeList = renderList($("listContainer"), sorted);
 }
-$("sortSelect").addEventListener("change", renderListView);
+$("sortField").addEventListener("change", () => {
+  sortField = $("sortField").value;
+  renderListView();
+});
+document.querySelectorAll(".sort-direction").forEach(button => {
+  button.addEventListener("click", () => {
+    sortDirection = button.dataset.sortDirection;
+    document.querySelectorAll(".sort-direction").forEach(direction => {
+      direction.setAttribute("aria-pressed", String(direction === button));
+    });
+    renderListView();
+  });
+});
 
 /* ---------- チェック選択 → まとめてダウンロード ---------- */
 function updateSelBar() {
@@ -65,27 +79,39 @@ $("selCancel").addEventListener("click", () => {
 });
 
 /* ---------- P2 検索 ---------- */
-let useOn = false;
-$("useToggle").addEventListener("click", () => {
-  useOn = !useOn;
-  $("useToggle").setAttribute("aria-pressed", String(useOn));
-  $("searchUse").disabled = !useOn;
-  if (!useOn) { $("searchUse").value = ""; $("searchUseOther").hidden = true; }
-});
 $("searchUse").addEventListener("change", () => {
   $("searchUseOther").hidden = $("searchUse").value !== "その他";
 });
 
+$("resetVolumeRange").addEventListener("click", () => {
+  $("searchVolumeMin").value = "";
+  $("searchVolumeMax").value = "";
+  $("searchErr").textContent = "";
+});
+
 $("searchBtn").addEventListener("click", () => {
+  const volumeMinInput = $("searchVolumeMin").value;
+  const volumeMaxInput = $("searchVolumeMax").value;
+  const volumeMin = volumeMinInput === "" ? null : Number(volumeMinInput);
+  const volumeMax = volumeMaxInput === "" ? null : Number(volumeMaxInput);
+  if ((volumeMin !== null && (!Number.isFinite(volumeMin) || volumeMin < 0)) ||
+      (volumeMax !== null && (!Number.isFinite(volumeMax) || volumeMax < 0)) ||
+      (volumeMin !== null && volumeMax !== null && volumeMin > volumeMax)) {
+    $("searchErr").textContent = "容積の下限・上限を0以上の数値で指定してください。下限は上限以下にしてください。";
+    return;
+  }
   const q = {
     name: $("searchName").value.trim(),
     pref: $("searchPref").value,
     city: $("searchCity").value.trim(),
-    use: useOn ? $("searchUse").value : "",
+    use: $("searchUse").value,
     useNote: $("searchUseOther").value.trim(),
-    volume: $("searchVolume").value
+    volume: $("searchVolume").value,
+    volumeMin,
+    volumeMax
   };
-  if (!q.name && !q.pref && !q.city && !q.use && !q.volume) {
+  if (!q.name && !q.pref && !q.city && !q.use && !q.volume &&
+      q.volumeMin === null && q.volumeMax === null) {
     $("searchErr").textContent = "検索条件を1つ以上指定してください。";
     return;
   }

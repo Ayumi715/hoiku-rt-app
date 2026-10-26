@@ -23,6 +23,53 @@ function valBox(label, v) {
   return d;
 }
 
+function roomSpecs(areas) {
+  const specs = el("div", "room-specs");
+  specs.append(el("h4", null, "部屋の寸法・容積"));
+  areas.forEach((area, i) => {
+    const room = area.room || {};
+    const item = el("div", "room-spec");
+    if (areas.length > 1) {
+      item.append(el("h5", null, `部屋${i + 1}（${room.useNote || room.use || "用途なし"}）`));
+    }
+    const grid = el("dl", "room-spec-grid");
+    const addSpec = (label, value, type) => {
+      const entry = el("div", `room-spec-value ${type}`);
+      entry.append(el("dt", null, label), el("dd", null, value));
+      grid.append(entry);
+    };
+    addSpec("容積", measureText(area.volume, "m³"), "volume");
+    const sections = sectionsOf(area);
+    if (sections.length > 1) {
+      const dimensionsGroup = el("div", "room-dimensions");
+      sections.forEach((section, sectionIndex) => {
+        const dimensions = [section.depth, section.width, room.height]
+          .map(value => measureText(value, ""))
+          .join(" × ") + " m";
+        const entry = el("div", "room-spec-value dimensions");
+        entry.append(el("dt", null, `部屋${sectionIndex + 1}`), el("dd", null, dimensions));
+        dimensionsGroup.append(entry);
+      });
+      grid.append(dimensionsGroup);
+    } else {
+      const dimensions = [room.depth, room.width, room.height]
+        .map(value => measureText(value, ""))
+        .join(" × ") + " m";
+      addSpec("奥行 × 幅 × 高さ", dimensions, "dimensions");
+    }
+    item.append(grid);
+    specs.append(item);
+  });
+  return specs;
+}
+
+function measureText(value, unit) {
+  const number = Number(value);
+  return value != null && value !== "" && Number.isFinite(number)
+    ? `${Number(number.toFixed(2))}${unit ? ` ${unit}` : ""}`
+    : "未登録";
+}
+
 function bandTable(ms) {
   const acc = new Map();
   ms.forEach(m => (m.bands || []).forEach(b => {
@@ -109,16 +156,20 @@ export function buildCard(g, { selectable = true } = {}) {
     });
     head.append(cb);
   }
-  head.append(el("h3", "card-title", g.title), el("div", "card-loc", `${g.prefecture} ${g.city}`));
+  head.append(
+    el("h3", "card-title", g.title),
+    el("div", "card-date", `測定日 ${g.dateText} / ${g.measurements.length}点の平均`),
+    el("div", "card-loc", `${g.prefecture} ${g.city}`)
+  );
 
   const body = el("div", "card-body");
   const ir = el("div", "ir-box"); ir.append(frag(irSvg(g.measurements)));
   const side = el("div", "side");
   const vals = el("div", "vals");
   vals.append(valBox("RT60", g.rt60), valBox("EDT", g.edt));
-  const note = el("div", "note", `測定日 ${g.dateText} / ${g.measurements.length}点の平均`);
+  const specs = roomSpecs(g.areas);
   const plan = el("div", "plan"); plan.append(frag(planSvg(g.areas)));
-  side.append(vals, note, plan);
+  side.append(vals, specs, plan);
   body.append(ir, side);
 
   const foot = el("div", "card-foot");
