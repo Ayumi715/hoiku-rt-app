@@ -51,7 +51,7 @@ export async function uploadMeasurement(state, idx, name) {
     r2: r.r2,
     valid: r.valid,
     bands: r.bands,
-    ir: packIr(r.ir, r.sampleRate),     // ← { sampleRate, samples } の形で保存
+    ir: packIr(r.ir, r.ir.length / r.irDuration),
     trials: r.trials ? r.trials.map(({ rt60, edt }) => ({ rt60, edt })) : [],
     ownerUid: user.uid,
     createdAt: FieldValue.serverTimestamp()
@@ -106,7 +106,8 @@ function measurementData(result) {
     r2: result.r2,
     valid: result.valid,
     bands: result.bands,
-    sampleRate: result.sampleRate,
+    sampleRate: result.ir.length / result.irDuration,
+    irDuration: result.irDuration,
     ir: Array.from(result.ir)
   };
 }

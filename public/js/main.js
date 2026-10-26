@@ -8,6 +8,7 @@ import { deleteFacilityHistory, uploadConcaveMeasurements, uploadMeasurement, lo
 const $ = id => document.getElementById(id);
 const fmt = n => String(Math.round((n + Number.EPSILON) * 100) / 100);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+const LEGACY_IR_DURATION = 0.9;
 
 /* ---------- 画面遷移 ---------- */
 const SCREENS = ["home", "history", "overview", "info", "checklist", "position", "measuring", "result", "help"];
@@ -577,7 +578,8 @@ function saveErrorMessage(error) {
 
 function drawImpulseResponse(r, canvas = $("irChart")) {
   const rect = canvas.getBoundingClientRect();
-  if (!rect.width || !r.ir || !r.ir.length) return;
+  const samples = Array.isArray(r.ir) ? r.ir : r.ir && r.ir.samples;
+  if (!rect.width || !samples || !samples.length) return;
   const ratio = window.devicePixelRatio || 1;
   const width = rect.width, height = 210;
   canvas.width = Math.floor(width * ratio);
@@ -589,19 +591,36 @@ function drawImpulseResponse(r, canvas = $("irChart")) {
   const styles = getComputedStyle(document.documentElement);
   const muted = styles.getPropertyValue("--muted").trim();
   const line = styles.getPropertyValue("--line").trim();
-  const left = 42, right = width - 12, top = 14, bottom = height - 32;
-  ctx.font = "11px sans-serif";
+  const left = 66, right = width - 12, top = 18, bottom = height - 45;
+  const sampleRate = r.ir && !Array.isArray(r.ir) ? r.ir.sampleRate : r.sampleRate;
+  // Older records tagged the 800-point resampled waveform with the microphone rate.
+  const inferredDuration = sampleRate
+    ? sampleRate > 4000 && samples.length <= 800 ? LEGACY_IR_DURATION : samples.length / sampleRate
+    : LEGACY_IR_DURATION;
+  const irDuration = r.irDuration || inferredDuration;
+  const visibleSamples = Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.05 / irDuration));
+  ctx.font = "9px sans-serif";
   ctx.fillStyle = muted;
   ctx.strokeStyle = line;
   ctx.lineWidth = 1;
+  ctx.textAlign = "right";
+  const amplitudeLabels = ["1.0", "0.5", "0", "-0.5", "-1.0"];
   for (let i = 0; i <= 4; i++) {
     const y = top + (bottom - top) * i / 4;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-    ctx.fillText(String(1 - i / 2), 2, y + 4);
+    ctx.fillText(amplitudeLabels[i], left - 8, y + 3);
   }
-  ctx.fillText("時間", right - 30, height - 5);
+  ctx.textAlign = "center";
+  ctx.font = "8px sans-serif";
+  for (let i = 0; i <= 10; i++) {
+    const x = left + (right - left) * i / 10;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.fillText((i * 0.005).toFixed(3), x, bottom + 14);
+  }
+  ctx.font = "10px sans-serif";
+  ctx.fillText("時間 (s)", (left + right) / 2, height - 5);
   ctx.save();
-  ctx.translate(11, (top + bottom) / 2);
+  ctx.translate(13, (top + bottom) / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = "center";
   ctx.fillText("振幅", 0, 0);
@@ -609,19 +628,25 @@ function drawImpulseResponse(r, canvas = $("irChart")) {
   ctx.strokeStyle = "#0f766e";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  const stride = Math.max(1, Math.ceil(r.ir.length / Math.max(1, right - left)));
-  for (let i = 0; i < r.ir.length; i += stride) {
-    const x = left + (right - left) * i / Math.max(1, r.ir.length - 1);
-    const y = bottom - (r.ir[i] + 1) / 2 * (bottom - top);
+  const stride = Math.max(1, Math.ceil((visibleSamples + 1) / Math.max(1, right - left)));
+  for (let i = 0; i <= visibleSamples; i += stride) {
+    const time = i * irDuration / Math.max(1, samples.length - 1);
+    const x = left + (right - left) * time / 0.05;
+    const y = bottom - (samples[i] + 1) / 2 * (bottom - top);
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
+  }
+  if (visibleSamples > 0 && visibleSamples % stride !== 0) {
+    const time = visibleSamples * irDuration / Math.max(1, samples.length - 1);
+    ctx.lineTo(left + (right - left) * time / 0.05,
+      bottom - (samples[visibleSamples] + 1) / 2 * (bottom - top));
   }
   ctx.stroke();
 }
 window.addEventListener("resize", () => {
   if (current === "history") {
     document.querySelectorAll("#historyList canvas[data-history-ir]").forEach(canvas => {
-      drawImpulseResponse({ ir: JSON.parse(canvas.dataset.historyIr) }, canvas);
+      drawImpulseResponse(JSON.parse(canvas.dataset.historyIr), canvas);
     });
     return;
   }
@@ -686,7 +711,7 @@ async function renderHistory() {
     st.textContent = `${items.length}件の施設`;
     items.forEach(f => list.appendChild(historyCard(f)));
     list.querySelectorAll("canvas[data-history-ir]").forEach(canvas => {
-      drawImpulseResponse({ ir: JSON.parse(canvas.dataset.historyIr) }, canvas);
+      drawImpulseResponse(JSON.parse(canvas.dataset.historyIr), canvas);
     });
   } catch (e) {
     console.error(e);
@@ -733,10 +758,15 @@ function historyResultCard(result) {
     : result.r2 > 0.8 ? "有効" : "再測定推奨"));
   quality.append(qualityMetric("適合度 R²", result.r2), validity);
   card.append(summary, quality);
-  if (Array.isArray(result.ir) && result.ir.length) {
+  const samples = Array.isArray(result.ir) ? result.ir : result.ir && result.ir.samples;
+  if (samples && samples.length) {
     const canvas = document.createElement("canvas");
     canvas.className = "result-chart";
-    canvas.dataset.historyIr = JSON.stringify(result.ir);
+    canvas.dataset.historyIr = JSON.stringify({
+      ir: result.ir,
+      irDuration: result.irDuration,
+      sampleRate: result.sampleRate
+    });
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", `${result.label}のインパルス応答`);
     card.appendChild(canvas);

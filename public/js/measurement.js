@@ -389,6 +389,7 @@ function analyzeImpulseResponse(ir, sampleRate) {
     r2: primary.r2,
     valid: primary.r2 > 0.8,
     bands,
+    irDuration: ir.length / sampleRate,
     ir: downsample(normalizedIr, 800),
     edc: downsample(edc, 800)
   };
