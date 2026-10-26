@@ -33,6 +33,9 @@ h1,h2,h3,h4{margin:0}
 .sort-field select,.sort-direction{padding:8px 12px}
 .field{display:flex;flex-direction:column;gap:8px}
 .field>span{font-size:14px;font-weight:600}
+.shape-filter{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;border:0}
+.shape-filter legend{width:100%;margin-bottom:2px;font-size:14px;font-weight:600}
+.shape-filter-button{flex:1;min-width:120px}
 .volume-range{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;gap:8px}
 .volume-bound{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
 .volume-bound input{width:100%;font-size:16px;padding:11px;border-radius:10px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}

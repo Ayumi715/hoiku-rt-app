@@ -54,6 +54,12 @@
       <input id="searchUseOther" type="text" placeholder="用途(自由記述)" autocomplete="off" hidden>
     </label>
 
+    <fieldset class="shape-filter">
+      <legend>部屋の形状</legend>
+      <button class="btn secondary small shape-filter-button" type="button" data-shape="rectangular" aria-pressed="false">長方形のみ</button>
+      <button class="btn secondary small shape-filter-button" type="button" data-shape="concave" aria-pressed="false">凹凸のみ</button>
+    </fieldset>
+
     <div class="field">
       <span>部屋の容積で絞り込み</span>
       <select id="searchVolume"><option value="">容積を指定しない</option></select>

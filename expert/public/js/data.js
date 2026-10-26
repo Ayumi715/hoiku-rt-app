@@ -116,6 +116,9 @@ export function sortGroups(groups, order) {
 
 // 指定された条件をすべて満たす(AND)グループだけ返す
 export function filterGroups(groups, q) {
+  const shapeOf = area => area.room.shape === "concave" || sectionsOf(area).length > 1
+    ? "concave"
+    : "rectangular";
   const volumeRange = ROOM_VOLUME_RANGES.find(range => range.value === q.volume);
   const hasCustomVolumeRange = q.volumeMin != null || q.volumeMax != null;
   const volumeMin = hasCustomVolumeRange ? q.volumeMin : volumeRange?.min;
@@ -135,9 +138,10 @@ export function filterGroups(groups, q) {
     (!q.name || g.name.includes(q.name)) &&
     (!q.pref || g.prefecture === q.pref) &&
     (!q.city || g.city.includes(q.city)) &&
-    ((!q.use && !hasVolumeFilter) || g.areas.some(a =>
+    ((!q.use && !hasVolumeFilter && !q.shape) || g.areas.some(a =>
       (!q.use || (a.room.use === q.use &&
         (q.use !== "その他" || !q.useNote || (a.room.useNote || "").includes(q.useNote)))) &&
+      (!q.shape || shapeOf(a) === q.shape) &&
       matchesVolume(a)))
   );
 }

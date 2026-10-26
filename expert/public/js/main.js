@@ -83,6 +83,15 @@ $("searchUse").addEventListener("change", () => {
   $("searchUseOther").hidden = $("searchUse").value !== "その他";
 });
 
+document.querySelectorAll(".shape-filter-button").forEach(button => {
+  button.addEventListener("click", () => {
+    const selected = button.getAttribute("aria-pressed") === "true";
+    document.querySelectorAll(".shape-filter-button").forEach(option => {
+      option.setAttribute("aria-pressed", String(option === button && !selected));
+    });
+  });
+});
+
 $("resetVolumeRange").addEventListener("click", () => {
   $("searchVolumeMin").value = "";
   $("searchVolumeMax").value = "";
@@ -107,11 +116,12 @@ $("searchBtn").addEventListener("click", () => {
     use: $("searchUse").value,
     useNote: $("searchUseOther").value.trim(),
     volume: $("searchVolume").value,
+    shape: document.querySelector('.shape-filter-button[aria-pressed="true"]')?.dataset.shape || "",
     volumeMin,
     volumeMax
   };
   if (!q.name && !q.pref && !q.city && !q.use && !q.volume &&
-      q.volumeMin === null && q.volumeMax === null) {
+      !q.shape && q.volumeMin === null && q.volumeMax === null) {
     $("searchErr").textContent = "検索条件を1つ以上指定してください。";
     return;
   }
